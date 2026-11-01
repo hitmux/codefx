@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           # macOS
@@ -143,8 +144,11 @@ jobs:
     # BuildBuddy credentials use Linux RBE for build actions; test execution
     # remains on a Windows runner.
     timeout-minutes: 30
+    needs: [test, test-windows-shard]
+    if: ${{ always() }}
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         shard:
           - 1
@@ -344,6 +348,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           # Keep Linux lint coverage on x64 and add the arm64 macOS path that
@@ -456,6 +461,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - os: ubuntu-24.04
