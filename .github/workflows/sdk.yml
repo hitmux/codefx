@@ -4,11 +4,17 @@ on:
   workflow_call:
 
 jobs:
-  python-sdk-installation:
+  sdks:
+    # Keep both SDK suites on one runner. They share checkout, Docker, and
+    # Bazel setup; running them in one job preserves every test while avoiding
+    # a second runner allocation and a second repository checkout.
     runs-on:
       group: ${{ github.event.repository.name }}-runners
       labels: ${{ github.event.repository.name }}-linux-x64
-    timeout-minutes: 10
+    timeout-minutes: 30
+    environment:
+      name: bazel
+      deployment: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -35,20 +41,6 @@ jobs:
               env -u PYTHONPATH -u CODEX_EXEC_PATH /tmp/installed/bin/python tests/installed_sdk_smoke.py
             '
 
-  sdks:
-    runs-on:
-      group: ${{ github.event.repository.name }}-runners
-      labels: ${{ github.event.repository.name }}-linux-x64
-    timeout-minutes: 20
-    environment:
-      name: bazel
-      deployment: false
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
       - name: Install Linux bwrap build dependencies
         shell: bash
         run: |
@@ -72,7 +64,7 @@ jobs:
         uses: ./.github/actions/prepare-bazel-ci
         with:
           target: x86_64-unknown-linux-gnu
-          cache-scope: sdk
+          cache-scope: bazel-target
 
       - name: Build codex and the code-mode host with Bazel
         id: build_bazel

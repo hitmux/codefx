@@ -3,6 +3,10 @@ on:
   workflow_call:
   workflow_dispatch:
 
+concurrency:
+  group: rust-ci::${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   # --- Detect changed paths so the fast PR workflow only runs relevant jobs ---
   changed:
@@ -78,24 +82,6 @@ jobs:
       - name: Rust benchmark smoke test
         run: just bench-smoke
 
-      - name: Check for a clean worktree
-        if: always() && !cancelled()
-        uses: ./.github/actions/check-clean-worktree
-
-  cargo_shear:
-    name: cargo shear
-    runs-on: ubuntu-24.04
-    needs: changed
-    if: ${{ needs.changed.outputs.codex == 'true' || needs.changed.outputs.workflows == 'true' }}
-    defaults:
-      run:
-        working-directory: codex-rs
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-ci
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
         with:
           tool: cargo-shear@1.11.2
@@ -222,7 +208,6 @@ jobs:
       [
         changed,
         general,
-        cargo_shear,
         argument_comment_lint_package,
         argument_comment_lint_prebuilt,
       ]
@@ -235,7 +220,6 @@ jobs:
           echo "argpkg : ${{ needs.argument_comment_lint_package.result }}"
           echo "arglint: ${{ needs.argument_comment_lint_prebuilt.result }}"
           echo "general: ${{ needs.general.result }}"
-          echo "shear  : ${{ needs.cargo_shear.result }}"
 
           # If nothing relevant changed (PR touching only root README, etc.),
           # declare success regardless of other jobs.
@@ -254,7 +238,6 @@ jobs:
 
           if [[ "${NEEDS_CHANGED_OUTPUTS_CODEX}" == 'true' || "${NEEDS_CHANGED_OUTPUTS_WORKFLOWS}" == 'true' ]]; then
             [[ '${{ needs.general.result }}' == 'success' ]] || { echo 'general failed'; exit 1; }
-            [[ '${{ needs.cargo_shear.result }}' == 'success' ]] || { echo 'cargo_shear failed'; exit 1; }
           fi
         env:
           NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT: ${{ needs.changed.outputs.argument_comment_lint }}

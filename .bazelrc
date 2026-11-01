@@ -113,8 +113,9 @@ common:ci --build_metadata=REPO_URL=https://github.com/openai/codex.git
 common:ci --build_metadata=ROLE=CI
 common:ci --build_metadata=VISIBILITY=PUBLIC
 
-# Disable disk cache in CI since we have a remote one and aren't using persistent workers.
-common:ci --disk_cache=
+# Keep the local action cache enabled in CI. BuildBuddy remains the preferred
+# remote cache when credentials are available, while this path lets jobs on
+# public runners reuse the same Bazel actions through actions/cache.
 
 # Shared config for the main Bazel CI workflow.
 common:ci-bazel --config=ci

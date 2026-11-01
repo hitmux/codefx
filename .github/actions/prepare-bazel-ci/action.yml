@@ -113,6 +113,19 @@ runs:
         echo "repository-cache-key=bazel-cache-${CACHE_SCOPE}-${TARGET}-${CACHE_HASH}" >> "${GITHUB_OUTPUT}"
         echo "repository-cache-restore-key=bazel-cache-${CACHE_SCOPE}-${TARGET}-" >> "${GITHUB_OUTPUT}"
 
+    # The repository cache only avoids downloading external archives. Keep the
+    # Bazel action cache separate and share it by target so test, clippy, and
+    # release verification jobs reuse compiled actions without sharing
+    # incompatible platform outputs. The action cache is content addressed by
+    # Bazel, so source changes safely invalidate individual entries.
+    - name: Cache Bazel action outputs
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ~/.cache/bazel-disk-cache
+        key: bazel-action-${{ inputs.cache-scope }}-${{ inputs.target }}-${{ hashFiles('MODULE.bazel', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
+        restore-keys: |
+          bazel-action-${{ inputs.cache-scope }}-${{ inputs.target }}-
+
     # Restore the Bazel repository cache explicitly so external dependencies
     # do not need to be re-downloaded on every CI run. Keep restore failures
     # non-fatal so transient cache-service errors degrade to a cold build
