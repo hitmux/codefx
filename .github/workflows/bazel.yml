@@ -144,7 +144,7 @@ jobs:
     # BuildBuddy credentials use Linux RBE for build actions; test execution
     # remains on a Windows runner.
     timeout-minutes: 30
-    needs: [test, test-windows-shard]
+    needs: test
     if: ${{ always() }}
     strategy:
       fail-fast: false
@@ -343,7 +343,7 @@ jobs:
     # Run after the platform test matrix so the shared Bazel action cache is
     # warm before lint builds start. The always() guard keeps lint diagnostics
     # available even when a test leg fails.
-    needs: test
+    needs: [test, test-windows-shard]
     if: ${{ always() }}
     timeout-minutes: 30
     strategy:
