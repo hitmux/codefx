@@ -1103,6 +1103,7 @@ def run_installer_in(
     root: Path,
     release: str,
     *,
+    installer_path: Path = INSTALL_SCRIPT,
     metadata_failure: bool = False,
     metadata_json: str | None = None,
     releases_metadata_json: str | None = None,
@@ -1320,7 +1321,7 @@ def run_installer_in(
             master_fd, slave_fd = os.openpty()
             os.write(master_fd, tty_response.encode("utf-8"))
         result = subprocess.run(
-            ["/bin/sh", str(INSTALL_SCRIPT.with_name("install-codefx.sh") if replacement_wrapper else INSTALL_SCRIPT), *arguments],
+            ["/bin/sh", str(INSTALL_SCRIPT.with_name("install-codefx.sh") if replacement_wrapper else installer_path), *arguments],
             capture_output=True,
             check=False,
             env=env,

@@ -199,9 +199,9 @@ exit /b 1
             $output = & (Join-Path $env:CODEX_INSTALL_DIR 'codex.exe') --version
             if ($output -ne 'codefx 0.164.0') { throw "New entrypoint failed for $case." }
             if ($case -eq 'repeat') {
-                [IO.File]::WriteAllText($cache, '{"dismissed_version":"0.165.0"}')
+                [IO.File]::WriteAllText($cache, '{"dismissed_version":"0.166.0"}')
                 & $base -Release '0.164.0' -ProcessTimeout 3
-                if ([IO.File]::ReadAllText($cache) -cne '{"dismissed_version":"0.165.0"}') { throw 'Same-source update lost version dismissals.' }
+                if ([IO.File]::ReadAllText($cache) -cne '{"dismissed_version":"0.166.0"}') { throw 'Same-source update lost version dismissals.' }
             }
             if ($case -in @('committed-recovery','interrupted-recovery')) {
                 $receipt = Get-ChildItem -LiteralPath $standalone -Directory -Force -Filter '.rollback.*' | Select-Object -First 1

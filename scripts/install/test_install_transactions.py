@@ -147,10 +147,10 @@ exec /bin/mv "$@"
                     self.assertFalse(cache.exists())
                     marker = root / 'codex-home/packages/standalone/codefx-update-source'
                     self.assertEqual(marker.read_text().strip(), 'hitmux/codefx')
-                    cache.write_text('{"dismissed_version":"0.165.0"}')
+                    cache.write_text('{"dismissed_version":"0.166.0"}')
                     again = self.run_install(root, package)
                     self.assertEqual(again.returncode, 0, again.stderr)
-                    self.assertEqual(cache.read_text(), '{"dismissed_version":"0.165.0"}')
+                    self.assertEqual(cache.read_text(), '{"dismissed_version":"0.166.0"}')
 
     def test_committed_receipt_recovery_keeps_the_verified_selection(self):
         with tempfile.TemporaryDirectory() as tmp:
