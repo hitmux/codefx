@@ -324,6 +324,12 @@ if [[ -n "${CODEX_BAZEL_EXECUTION_LOG_COMPACT_DIR:-}" ]]; then
 fi
 
 if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
+  # The Windows GNU test graph uses an MSVC host toolchain for helper
+  # binaries. Pass the Visual Studio terms acceptance directly to Bazel's
+  # repository environment so the windows_support module extension receives
+  # it even when the local fallback omits the ci-windows config.
+  post_config_bazel_args+=("--repo_env=BAZEL_MSVC_RUNTIME_VISUAL_STUDIO_EULA=1")
+
   pass_windows_build_env=1
   if [[ $windows_cross_compile -eq 1 && -n "${BUILDBUDDY_API_KEY:-}" ]]; then
     # Remote build actions execute on Linux RBE workers. Passing the Windows
