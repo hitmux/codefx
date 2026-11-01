@@ -8,9 +8,7 @@ jobs:
     # Keep both SDK suites on one runner. They share checkout, Docker, and
     # Bazel setup; running them in one job preserves every test while avoiding
     # a second runner allocation and a second repository checkout.
-    runs-on:
-      group: ${{ github.event.repository.name }}-runners
-      labels: ${{ github.event.repository.name }}-linux-x64
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     environment:
       name: bazel
