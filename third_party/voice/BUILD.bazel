@@ -351,6 +351,7 @@ label_flag(
         target_compatible_with = [
             "@platforms//os:windows",
             "@platforms//cpu:" + cpu,
+            "@llvm//constraints/windows/abi:msvc",
         ],
     )
     for cpu, arch in (
