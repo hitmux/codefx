@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: rust-ci::${{ github.event.pull_request.number || github.ref }}
+  group: rust-ci::${{ github.event.pull_request.number || github.ref }}::scheduler-v4
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
