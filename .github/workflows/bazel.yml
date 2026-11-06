@@ -26,11 +26,7 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          # macOS
-          - os: macos-15
-            target: aarch64-apple-darwin
-          - os: macos-15
-            target: x86_64-apple-darwin
+
 
           # Linux
           - os: ubuntu-24.04
@@ -351,14 +347,9 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          # Keep Linux lint coverage on x64 and add the arm64 macOS path that
-          # the Bazel test job already exercises. Add Windows gnullvm as well
-          # so PRs get Bazel-native lint signal on the same Windows toolchain
-          # that the Bazel test job uses.
+          # Retain Linux x64 and Windows gnullvm lint coverage on the CI toolchains.
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-          - os: macos-15
-            target: aarch64-apple-darwin
           - os: windows-2025
             target: x86_64-pc-windows-gnullvm
     runs-on: ${{ matrix.runs_on || matrix.os }}
@@ -455,7 +446,7 @@ jobs:
 
   verify-release-build:
     # Reuse the action cache populated by tests and clippy instead of starting
-    # three cold Bazel graphs in parallel.
+    # two cold Bazel graphs in parallel.
     needs: clippy
     if: ${{ always() }}
     timeout-minutes: 30
@@ -466,8 +457,6 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-          - os: macos-15
-            target: aarch64-apple-darwin
           - os: windows-2025
             target: x86_64-pc-windows-gnullvm
     runs-on: ${{ matrix.runs_on || matrix.os }}

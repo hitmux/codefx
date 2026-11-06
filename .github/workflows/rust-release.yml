@@ -1,3 +1,5 @@
+# Upstream cross-platform tag publisher is intentionally manual-only in Codefx.
+# Codefx Linux/Windows artifacts use codefx-platform-release.yml.
 # Release workflow for codex-rs.
 # To release, follow a workflow like:
 # ```
@@ -10,9 +12,7 @@
 
 name: rust-release
 on:
-  push:
-    tags:
-      - "rust-v*.*.*"
+  workflow_dispatch:
 
 env:
   CODEX_REPO_ROOT: ${{ github.workspace }}
