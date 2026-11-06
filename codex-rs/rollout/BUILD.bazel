@@ -3,4 +3,8 @@ load("//:defs.bzl", "codex_rust_crate")
 codex_rust_crate(
     name = "rollout",
     crate_name = "codex_rollout",
+    # These tests verify chown(2) to a supplementary GID. A Bazel Linux
+    # user namespace can leave those groups unmapped (EINVAL); run the
+    # test wrapper locally to exercise real file ownership behavior.
+    test_tags = ["local"],
 )

@@ -21,6 +21,23 @@ outputs:
 runs:
   using: composite
   steps:
+    # GitHub-hosted Linux runners have limited free disk space. A full
+    # cold Bazel graph exhausted the filesystem and prevented cache saves.
+    # These preinstalled SDKs are unused by the Rust/Bazel CI matrix.
+    - name: Reclaim unused runner disk space (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+        for unused_path in /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; do
+          if [[ -d "$unused_path" ]]; then
+            echo "Removing unused hosted-runner SDK: $unused_path"
+            sudo rm -rf -- "$unused_path"
+          fi
+        done
+        sudo apt-get clean
+        df -h "$GITHUB_WORKSPACE"
+
     - id: setup_ci
       uses: ./.github/actions/setup-ci
 
