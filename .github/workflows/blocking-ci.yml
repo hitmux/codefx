@@ -56,7 +56,9 @@ concurrency:
   # A newer commit supersedes every older PR run. This prevents a burst of
   # commits from consuming a full matrix for each intermediate revision while
   # keeping main pushes serialized for release confidence.
-  group: blocking-ci::${{ github.event.pull_request.number || github.ref }}::scheduler-v2
+  # v3 isolates this PR gate from stuck pre-fix v2 reusable-workflow jobs;
+  # those old runs may keep macOS/Windows workers alive after cancellation.
+  group: blocking-ci::${{ github.event.pull_request.number || github.ref }}::scheduler-v3
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
