@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}::scheduler-v3
+  group: ${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}::scheduler-v4
   cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
@@ -270,7 +270,7 @@ jobs:
   build-windows-source:
     name: Build ptrcomp-sandbox ${{ matrix.target }} from source
     needs: [metadata, build]
-    if: ${{ always() && needs.metadata.outputs.windows_source_required == 'true' }}
+    if: ${{ always() && !cancelled() && needs.metadata.outputs.windows_source_required == 'true' }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
