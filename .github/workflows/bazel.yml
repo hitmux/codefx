@@ -20,7 +20,7 @@ jobs:
     # signal without putting PR latency back on the critical path. When
     # Code-mode unit tests run on every Bazel target. When authenticated RBE
     # is available, the Windows-cross shards exercise the source-built V8 path.
-    timeout-minutes: 120
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -137,7 +137,7 @@ jobs:
     # Split the Windows Bazel test leg across separate Windows hosts. Jobs with
     # BuildBuddy credentials use Linux RBE for build actions; test execution
     # remains on a Windows runner.
-    timeout-minutes: 120
+    timeout-minutes: 180
     needs: test
     # Preserve coverage after a failed Linux dependency, but stop all queued
     # Windows shards promptly when a newer PR revision cancels this run.
@@ -260,7 +260,7 @@ jobs:
     # 30-minute PR budget. Run this only for post-merge commits to main and give
     # it a larger timeout. Also allow manual runs for native toolchain changes.
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-    timeout-minutes: 120
+    timeout-minutes: 240
     runs-on: windows-2025
     name: Bazel test on windows-latest for x86_64-pc-windows-msvc (native main)
     environment:
@@ -341,7 +341,7 @@ jobs:
     # available even when a test leg fails.
     needs: [test, test-windows-shard]
     if: ${{ always() && !cancelled() }}
-    timeout-minutes: 120
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -449,7 +449,7 @@ jobs:
     # two cold Bazel graphs in parallel.
     needs: clippy
     if: ${{ always() && !cancelled() }}
-    timeout-minutes: 120
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       max-parallel: 1
