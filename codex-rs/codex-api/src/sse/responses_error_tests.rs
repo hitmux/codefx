@@ -48,14 +48,9 @@ async fn policy_capacity_classification_preserves_overload_retry_behavior() {
             .unwrap();
             let error = map_api_error(process_responses_event(event).unwrap_err().into_api_error());
             assert_eq!(
-                (
-                    error.to_codex_protocol_error(),
-                    error.retry_delay(/*retry_count*/ 1),
-                    error.to_string()
-                ),
+                (error.to_codex_protocol_error(), error.to_string()),
                 (
                     expected.clone(),
-                    retry_after.map(|_| Duration::from_secs(3)),
                     if expected == CodexErrorInfo::PolicyCapacityUnavailable {
                         "Policy-restricted capacity is unavailable. Please try again later."
                     } else {
@@ -64,6 +59,12 @@ async fn policy_capacity_classification_preserves_overload_retry_behavior() {
                     .to_string()
                 )
             );
+            if retry_after.is_some() {
+                assert_eq!(error.retry_delay(/*retry_count*/ 1), Some(Duration::from_secs(3)));
+            } else {
+                // Explicit capacity errors remain retryable using local backoff.
+                assert!(error.retry_delay(/*retry_count*/ 1).is_some(), "{code}");
+            }
         }
     }
 }
