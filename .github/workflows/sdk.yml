@@ -9,7 +9,7 @@ jobs:
     # Bazel setup; running them in one job preserves every test while avoiding
     # a second runner allocation and a second repository checkout.
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 120
     environment:
       name: bazel
       deployment: false
