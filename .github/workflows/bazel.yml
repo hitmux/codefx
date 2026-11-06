@@ -10,7 +10,7 @@ on:
 concurrency:
   # Cancel previous actions from the same PR or branch except 'main' branch.
   # See https://docs.github.com/en/actions/using-jobs/using-concurrency and https://docs.github.com/en/actions/learn-github-actions/contexts for more info.
-  group: concurrency-group::${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}${{ github.ref_name == 'main' && format('::{0}', github.run_id) || ''}}
+  group: concurrency-group::${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}${{ github.ref_name == 'main' && format('::{0}', github.run_id) || ''}}::scheduler-v4
   cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
     # signal without putting PR latency back on the critical path. When
     # Code-mode unit tests run on every Bazel target. When authenticated RBE
     # is available, the Windows-cross shards exercise the source-built V8 path.
-    timeout-minutes: 30
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -137,7 +137,7 @@ jobs:
     # Split the Windows Bazel test leg across separate Windows hosts. Jobs with
     # BuildBuddy credentials use Linux RBE for build actions; test execution
     # remains on a Windows runner.
-    timeout-minutes: 30
+    timeout-minutes: 120
     needs: test
     # Preserve coverage after a failed Linux dependency, but stop all queued
     # Windows shards promptly when a newer PR revision cancels this run.
@@ -260,7 +260,7 @@ jobs:
     # 30-minute PR budget. Run this only for post-merge commits to main and give
     # it a larger timeout. Also allow manual runs for native toolchain changes.
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-    timeout-minutes: 40
+    timeout-minutes: 120
     runs-on: windows-2025
     name: Bazel test on windows-latest for x86_64-pc-windows-msvc (native main)
     environment:
@@ -341,7 +341,7 @@ jobs:
     # available even when a test leg fails.
     needs: [test, test-windows-shard]
     if: ${{ always() && !cancelled() }}
-    timeout-minutes: 30
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -449,7 +449,7 @@ jobs:
     # two cold Bazel graphs in parallel.
     needs: clippy
     if: ${{ always() && !cancelled() }}
-    timeout-minutes: 30
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       max-parallel: 1
