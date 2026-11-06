@@ -24,7 +24,7 @@ jobs:
     needs:
       - rust-ci-full
       - v8-canary
-    if: ${{ always() }}
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-24.04
     steps:
       # Postmerge runs use the pushed main commit, so this helper always comes

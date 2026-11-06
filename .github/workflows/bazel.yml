@@ -141,10 +141,12 @@ jobs:
     # remains on a Windows runner.
     timeout-minutes: 30
     needs: test
-    if: ${{ always() }}
+    # Preserve coverage after a failed Linux dependency, but stop all queued
+    # Windows shards promptly when a newer PR revision cancels this run.
+    if: ${{ always() && !cancelled() }}
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 2
       matrix:
         shard:
           - 1
@@ -241,7 +243,7 @@ jobs:
   test-windows:
     # Preserve the existing required-check surface while the real work happens
     # in the sharded Windows jobs above.
-    if: always()
+    if: ${{ always() && !cancelled() }}
     needs: test-windows-shard
     runs-on: ubuntu-24.04
     name: Bazel test on windows-latest for x86_64-pc-windows-gnullvm
@@ -340,7 +342,7 @@ jobs:
     # warm before lint builds start. The always() guard keeps lint diagnostics
     # available even when a test leg fails.
     needs: [test, test-windows-shard]
-    if: ${{ always() }}
+    if: ${{ always() && !cancelled() }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -448,7 +450,7 @@ jobs:
     # Reuse the action cache populated by tests and clippy instead of starting
     # two cold Bazel graphs in parallel.
     needs: clippy
-    if: ${{ always() }}
+    if: ${{ always() && !cancelled() }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
