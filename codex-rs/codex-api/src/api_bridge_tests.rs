@@ -39,7 +39,10 @@ async fn http_policy_capacity_preserves_retry_advice_and_local_backoff() {
                 (expected.clone(), advice)
             );
             if advice.is_some() {
-                assert_eq!(error.retry_delay(/*retry_count*/ 1), Some(Duration::from_secs(3)));
+                assert_eq!(
+                    error.retry_delay(/*retry_count*/ 1),
+                    Some(Duration::from_secs(3))
+                );
             } else {
                 // Capacity errors without Retry-After must still use local backoff.
                 assert!(error.retry_delay(/*retry_count*/ 1).is_some(), "{code}");
