@@ -1,5 +1,9 @@
 name: Codefx Linux/Windows packages
 on:
+  workflow_call:
+    inputs:
+      tag: { type: string, required: true }
+      reuse_only: { type: boolean, required: false, default: false }
   workflow_dispatch:
     inputs:
       tag:

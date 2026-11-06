@@ -46,7 +46,7 @@ These fixed bootstraps default to installer commit `{source}`. The base installe
 are included for review. The bootstraps download that exact base revision over
 HTTPS; package downloads and GitHub release metadata require network access.
 
-Linux/macOS: `sh scripts/install/install-codefx.sh`
+Linux: `sh scripts/install/install-codefx.sh`
 Windows, ordinary PowerShell: `& ./scripts/install/install-codefx.ps1`
 
 Save work and close active Codex sessions before installation. Options and
