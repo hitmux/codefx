@@ -51,6 +51,18 @@ jobs:
           # Avoid duplicating thousands of Bazel outputs in the disk action cache.
           action-cache: "false"
 
+      # Bazel's CAS validates each artifact. Only shard 1 saves a bounded
+      # snapshot, which later shards and PR commits can reuse.
+      - name: Restore Linux Bazel compiled actions
+        id: restore_linux_actions
+        continue-on-error: true
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ${{ runner.temp }}/codefx-bazel-actions
+          key: codefx-bazel-actions-v1-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
+          restore-keys: |
+            codefx-bazel-actions-v1-${{ matrix.target }}-
+
       - name: Check rusty_v8 MODULE.bazel checksums
         if: matrix.target == 'x86_64-unknown-linux-gnu' && matrix.shard == 1
         shell: bash
@@ -78,6 +90,7 @@ jobs:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
           BAZEL_TEST_SHARD: ${{ matrix.shard }}
           BAZEL_TEST_SHARD_COUNT: 4
+          BAZEL_ACTION_CACHE_HIT: ${{ steps.restore_linux_actions.outputs.cache-hit }}
         shell: bash
         run: |
           set -euo pipefail
@@ -102,7 +115,8 @@ jobs:
             test
             --build_tests_only
             --skip_incompatible_explicit_targets
-            --disk_cache=
+            --disk_cache=${RUNNER_TEMP}/codefx-bazel-actions
+            --experimental_disk_cache_gc_max_size=2G
             --test_tag_filters=-argument-comment-lint
             --test_verbose_timeout_warnings
             --build_metadata=COMMIT_SHA=${GITHUB_SHA}
@@ -110,6 +124,11 @@ jobs:
           )
           if [[ -z "${BUILDBUDDY_API_KEY:-}" ]]; then
             bazel_test_args+=(--jobs=8)
+            # Immutable cache snapshots are read-only on exact hits; other
+            # shards read the shared snapshot without duplicating cache writes.
+            if [[ "${BAZEL_TEST_SHARD}" != "1" || "${BAZEL_ACTION_CACHE_HIT}" == "true" ]]; then
+              bazel_test_args+=(--noremote_upload_local_results)
+            fi
           fi
           ./.github/scripts/run-bazel-ci.sh \
             --print-failed-action-summary \
@@ -124,11 +143,54 @@ jobs:
         shell: bash
         run: |
           df -h "${GITHUB_WORKSPACE}"
-          for dir in "${BAZEL_OUTPUT_BASE}" "${BAZEL_REPOSITORY_CACHE}" "${HOME}/.cache/bazel-disk-cache"; do
+          for dir in "${BAZEL_OUTPUT_BASE}" "${BAZEL_REPOSITORY_CACHE}" "${RUNNER_TEMP}/codefx-bazel-actions"; do
             if [[ -d "${dir}" ]]; then
               du -sh "${dir}" || true
             fi
           done
+
+      # Prune after Bazel exits to prevent races with running compilation.
+      # Keep only a 2 GiB snapshot per Linux target (4 GiB for both targets).
+      - name: Bound Linux Bazel compiled action cache
+        if: ${{ always() && !cancelled() && matrix.shard == 1 && steps.restore_linux_actions.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          cache = Path(os.environ["RUNNER_TEMP"]) / "codefx-bazel-actions"
+          limit = 2 * 1024 ** 3
+          files = []
+          for directory, _, names in os.walk(cache):
+              for name in names:
+                  path = Path(directory) / name
+                  if path.is_symlink():
+                      continue
+                  try:
+                      stat = path.stat()
+                  except FileNotFoundError:
+                      continue
+                  files.append((max(stat.st_atime_ns, stat.st_mtime_ns), path, stat.st_size))
+          size = sum(length for _, _, length in files)
+          for _, path, length in sorted(files):
+              if size <= limit:
+                  break
+              try:
+                  path.unlink()
+              except FileNotFoundError:
+                  continue
+              size -= length
+          print(f"Bazel action cache snapshot: {size / 1024 ** 3:.2f} GiB")
+          PY
+
+      - name: Save bounded Linux Bazel compiled action cache
+        if: ${{ always() && !cancelled() && matrix.shard == 1 && steps.restore_linux_actions.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ${{ runner.temp }}/codefx-bazel-actions
+          key: codefx-bazel-actions-v1-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
 
       - name: Upload Bazel execution logs
         if: always() && !cancelled()
