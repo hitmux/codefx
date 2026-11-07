@@ -100,8 +100,12 @@ jobs:
             --print-failed-action-summary
             --print-failed-test-logs
           )
+          # Bazel test //... otherwise also builds every non-test target,
+          # including large V8 binaries that are covered by the dedicated
+          # verify-release-build job. Keep the entire test graph and its deps.
           bazel_test_args=(
             test
+            --build_tests_only
             --disk_cache=
             --test_tag_filters=-argument-comment-lint
             --test_verbose_timeout_warnings
