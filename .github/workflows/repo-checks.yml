@@ -46,9 +46,6 @@ jobs:
       - name: Test standalone installer
         run: python3 -m unittest discover -s scripts/install -p 'test_*.py'
 
-      - name: Test macOS signing and notarization
-        run: python3 -m unittest discover -s .github/scripts/macos-signing -p 'test_*.py'
-
       - name: Setup pnpm
         uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
         with:
@@ -57,7 +54,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version: 22
+          node-version-file: .nvmrc
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

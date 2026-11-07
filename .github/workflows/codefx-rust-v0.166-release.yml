@@ -1,0 +1,175 @@
+name: Codefx 0.166 verified release
+on:
+  workflow_run:
+    workflows: ["postmerge-ci"]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: codefx-rust-v0.166.0-release
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    if: >-
+      ${{ github.repository == 'hitmux/codefx' &&
+          (github.event_name == 'workflow_dispatch' ||
+           (github.event.workflow_run.conclusion == 'success' &&
+            github.event.workflow_run.event == 'push' &&
+            github.event.workflow_run.head_branch == 'main')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    outputs:
+      publish: ${{ steps.check.outputs.publish }}
+      source_sha: ${{ steps.check.outputs.source_sha }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      RELEASE_TAG: rust-v0.166.0
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - id: check
+        name: Verify PR 4 merge, exact main SHA, Cargo 0.166.0 and required CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_SHA" ]]
+          gh api "repos/$GITHUB_REPOSITORY/pulls/4" > "$RUNNER_TEMP/pr.json"
+          gh api "repos/$GITHUB_REPOSITORY/branches/main" > "$RUNNER_TEMP/main.json"
+          python3 - <<'PY'
+          import json, os, tomllib
+          from pathlib import Path
+          pr = json.loads((Path(os.environ["RUNNER_TEMP"]) / "pr.json").read_text())
+          main = json.loads((Path(os.environ["RUNNER_TEMP"]) / "main.json").read_text())
+          sha = os.environ["SOURCE_SHA"]
+          # Subsequent unrelated main commits must not restart the 0.166 publisher.
+          eligible = (pr["merged"] is True
+                      and pr["base"]["ref"] == "main"
+                      and pr["merge_commit_sha"] == sha
+                      and main["commit"]["sha"] == sha)
+          if not eligible:
+              print("This run does not target PR #4's exact merged main commit.")
+              Path(os.environ["RUNNER_TEMP"], "skip-release").touch()
+          else:
+              version = tomllib.loads(Path("codex-rs/Cargo.toml").read_text())["workspace"]["package"]["version"]
+              assert version == "0.166.0", f"unexpected Cargo workspace version: {version}"
+          PY
+          if [[ -f "$RUNNER_TEMP/skip-release" ]]; then
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease > "$RUNNER_TEMP/existing-release.json" 2>/dev/null; then
+            if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if not d["isDraft"] and not d["isPrerelease"] else 1)' "$RUNNER_TEMP/existing-release.json"; then
+              echo 'Release already published; no second publication.'
+              echo 'publish=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          passed=false
+          for attempt in $(seq 1 110); do
+            gh api "repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA/check-runs?per_page=100" > "$RUNNER_TEMP/checks.json"
+            if python3 - <<'PY'
+          import json, sys
+          from pathlib import Path
+          from os import environ
+          checks=json.loads((Path(environ["RUNNER_TEMP"])/"checks.json").read_text())["check_runs"]
+          required=("CI required", "Postmerge CI results")
+          for name in required:
+              runs=[c for c in checks if c["name"] == name]
+              if not runs or any(c["status"] != "completed" for c in runs):
+                  print(f"{name}: pending")
+                  sys.exit(75)
+              latest=max(runs, key=lambda c:(c.get("started_at") or "", c["id"]))
+              if latest["conclusion"] != "success":
+                  print(f"{name}: {latest['conclusion']}"); sys.exit(1)
+              print(f"{name}: success")
+          PY
+            then
+              passed=true
+              break
+            else
+              rc=$?
+              if [[ "$rc" != 75 ]]; then
+                echo 'Required main CI failed; release blocked.' >&2
+                exit "$rc"
+              fi
+            fi
+            sleep 30
+          done
+          [[ "$passed" == true ]] || { echo 'Timed out waiting for main CI.' >&2; exit 1; }
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" > "$RUNNER_TEMP/tag-ref.json" 2>/dev/null; then
+            python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          ref=json.loads(Path(os.environ["RUNNER_TEMP"],"tag-ref.json").read_text())
+          assert ref["object"]["sha"] == os.environ["SOURCE_SHA"], "Release tag points to a different commit"
+          PY
+          fi
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+              --title "Codefx CLI 0.166.0" --notes "Verified Codefx 0.166.0 release candidate. Linux/Windows packages only; promoted after native checks." \
+              --prerelease
+          fi
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease
+          echo 'publish=true' >> "$GITHUB_OUTPUT"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+
+  packages:
+    needs: gate
+    if: ${{ needs.gate.outputs.publish == 'true' }}
+    uses: ./.github/workflows/codefx-platform-release.yml
+    with:
+      tag: rust-v0.166.0
+      reuse_only: false
+    secrets: inherit
+
+  promote:
+    needs: [gate, packages]
+    if: ${{ needs.gate.outputs.publish == 'true' && needs.packages.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: rust-v0.166.0
+      SOURCE_SHA: ${{ needs.gate.outputs.source_sha }}
+    steps:
+      - name: Verify Linux/Windows digests, provenance and installers before stable publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          data=json.loads(Path(os.environ["RUNNER_TEMP"],"release.json").read_text())
+          assert data["tag_name"] == os.environ["RELEASE_TAG"]
+          assert data["prerelease"] and not data["draft"], "release must be an accessible prerelease during native smoke"
+          assets={a["name"]:a for a in data["assets"]}
+          targets=("x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl",
+                   "x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc")
+          required={"codex-package_SHA256SUMS"}
+          for target in targets:
+              required.update((f"codex-package-{target}.tar.gz", f"{target}.sha256",
+                               f"codefx-build-{target}.json", f"codefx-lock-{target}.patch"))
+          installer=f"codefx-installers-{os.environ['SOURCE_SHA'][:12]}.zip"
+          required.update((installer, installer+".sha256"))
+          missing=required-assets.keys()
+          assert not missing, "Missing verified release assets: "+", ".join(sorted(missing))
+          for name in required:
+              asset=assets[name]
+              assert asset["state"] == "uploaded", f"unfinished release asset: {name}"
+              assert re.fullmatch(r"sha256:[0-9a-f]{64}", asset.get("digest") or ""), f"unverified digest: {name}"
+          assert not any("apple-darwin" in name or name.endswith(".dmg") for name in assets), "macOS release asset present"
+          print("All four platform packages, per-target SHA256/provenance, manifest and pinned installers verified.")
+          PY
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --prerelease=false --latest
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,tagName
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq \
+            'if (.prerelease == false and .draft == false and .tag_name == "rust-v0.166.0") then "stable release verified" else error("release did not become stable") end'

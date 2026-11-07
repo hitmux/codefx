@@ -3,9 +3,63 @@ name: blocking-ci
 # This is the single entrypoint for checks that block a PR merge. It also runs
 # after pushes to main so the same check family stays grouped in the Actions UI.
 on:
-  pull_request: {}
+  pull_request:
+    paths:
+      - "codex-rs/**"
+      - "sdk/**"
+      - "scripts/**"
+      - "tools/**"
+      - "third_party/**"
+      - ".github/actions/**"
+      - ".github/scripts/**"
+      - ".github/workflows/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "MODULE.bazel"
+      - "MODULE.bazel.lock"
+      - ".bazelrc"
+      - "WORKSPACE*"
+      - "BUILD*"
+      - "*.bzl"
+      - "justfile"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pyproject.toml"
+      - "uv.lock"
+  workflow_dispatch:
   push:
     branches: [main]
+    paths:
+      - "codex-rs/**"
+      - "sdk/**"
+      - "scripts/**"
+      - "tools/**"
+      - "third_party/**"
+      - ".github/actions/**"
+      - ".github/scripts/**"
+      - ".github/workflows/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "MODULE.bazel"
+      - "MODULE.bazel.lock"
+      - ".bazelrc"
+      - "WORKSPACE*"
+      - "BUILD*"
+      - "*.bzl"
+      - "justfile"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pyproject.toml"
+      - "uv.lock"
+
+concurrency:
+  # A newer commit supersedes every older PR run. This prevents a burst of
+  # commits from consuming a full matrix for each intermediate revision while
+  # keeping main pushes serialized for release confidence.
+  # v3 isolates this PR gate from stuck pre-fix v2 reusable-workflow jobs;
+  # those old runs may keep macOS/Windows workers alive after cancellation.
+  group: blocking-ci::${{ github.event.pull_request.number || github.ref }}::scheduler-v3
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Keep reusable workflow calls alphabetized. The `required` job below is the
@@ -42,6 +96,11 @@ jobs:
 
   sdk:
     name: sdk
+    # SDK Bazel targets overlap with the main GNU Bazel graph. Start this
+    # suite after that graph so the shared action cache can be reused while
+    # still running the SDK tests when the Bazel suite fails.
+    needs: bazel
+    if: ${{ always() && !cancelled() }}
     uses: ./.github/workflows/sdk.yml
     secrets: inherit
 
@@ -49,7 +108,7 @@ jobs:
     name: CI required
     # Without `always()`, GitHub skips this job after a failed dependency and a
     # required check can appear successful instead of reporting the failure.
-    if: ${{ always() }}
+    if: ${{ always() && !cancelled() }}
     needs:
       - bazel
       - blob-size-policy
