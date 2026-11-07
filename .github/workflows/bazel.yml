@@ -102,7 +102,7 @@ jobs:
           )
           bazel_test_args=(
             test
-            --nodisk_cache
+            --disk_cache=
             --test_tag_filters=-argument-comment-lint
             --test_verbose_timeout_warnings
             --build_metadata=COMMIT_SHA=${GITHUB_SHA}
