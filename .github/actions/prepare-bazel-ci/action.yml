@@ -7,6 +7,10 @@ inputs:
   cache-scope:
     description: Logical namespace used to keep concurrent Bazel jobs from reserving the same repository cache key.
     required: true
+  action-cache:
+    description: Enable the local Bazel disk action cache (disable for large cold CI test graphs to avoid exhausting runner disk).
+    required: false
+    default: "true"
 outputs:
   repository-cache-path:
     description: Filesystem path used for the Bazel repository cache.
@@ -136,6 +140,7 @@ runs:
     # incompatible platform outputs. The action cache is content addressed by
     # Bazel, so source changes safely invalidate individual entries.
     - name: Cache Bazel action outputs
+      if: inputs.action-cache == 'true'
       uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ~/.cache/bazel-disk-cache
