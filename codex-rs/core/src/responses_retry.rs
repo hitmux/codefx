@@ -88,7 +88,9 @@ pub(crate) async fn handle_response_stream_error(
     // A legacy gateway OAuth credential failure may arrive as a retryable
     // transport error. Reconnecting cannot repair the missing OAuth session.
     if turn_context.provider.info().gateway_oauth.is_some()
-        && err.to_string().contains("Gateway OAuth authentication failed;")
+        && err
+            .to_string()
+            .contains("Gateway OAuth authentication failed;")
     {
         return Err(err);
     }
