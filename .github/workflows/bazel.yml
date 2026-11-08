@@ -51,16 +51,21 @@ jobs:
           # Avoid duplicating thousands of Bazel outputs in the disk action cache.
           action-cache: "false"
 
-      # Bazel's CAS validates each artifact. Only shard 1 saves a bounded
-      # snapshot, which later shards and PR commits can reuse.
+      # Bazel's CAS validates each artifact. Rotate immutable snapshots per
+      # commit so source-only changes can publish freshly compiled actions.
+      # Only shard 1 uploads a bounded snapshot; older v1 keys remain readable.
       - name: Restore Linux Bazel compiled actions
         id: restore_linux_actions
         continue-on-error: true
         uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ runner.temp }}/codefx-bazel-actions
-          key: codefx-bazel-actions-v1-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
+          key: codefx-bazel-actions-v2-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}-${{ github.sha }}
           restore-keys: |
+            # Prefer a recent snapshot for the same toolchain, then fall
+            # back to older compatible snapshots across upstream syncs.
+            codefx-bazel-actions-v2-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}-
+            codefx-bazel-actions-v2-${{ matrix.target }}-
             codefx-bazel-actions-v1-${{ matrix.target }}-
 
       - name: Check rusty_v8 MODULE.bazel checksums
@@ -190,7 +195,7 @@ jobs:
         uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ runner.temp }}/codefx-bazel-actions
-          key: codefx-bazel-actions-v1-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
+          key: codefx-bazel-actions-v2-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}-${{ github.sha }}
 
       - name: Upload Bazel execution logs
         if: always() && !cancelled()
