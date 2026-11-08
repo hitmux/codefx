@@ -85,6 +85,16 @@ pub(crate) async fn handle_response_stream_error(
         ResponsesStreamRequest::Sampling => RetryOperation::Sampling,
         ResponsesStreamRequest::RemoteCompactionV2 => RetryOperation::RemoteCompactionV2,
     };
+    // A legacy gateway OAuth credential failure may arrive as a retryable
+    // transport error. Reconnecting cannot repair the missing OAuth session.
+    if turn_context.provider.info().gateway_oauth.is_some()
+        && err
+            .to_string()
+            .contains("Gateway OAuth authentication failed;")
+    {
+        return Err(err);
+    }
+
     let retry_count = retry_state.retries.saturating_add(1);
     let Some(delay) = err.retry_delay(retry_count) else {
         return Err(err);

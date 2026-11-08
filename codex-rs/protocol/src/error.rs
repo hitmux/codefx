@@ -168,6 +168,9 @@ pub enum CodexErrorDetails {
     UsageLimitReached(UsageLimitReachedError),
     #[error("Selected model is at capacity. Please try a different model.")]
     ServerOverloaded,
+    /// Policy-restricted capacity follows the same retry advice as ordinary overloads.
+    #[error("Policy-restricted capacity is unavailable. Please try again later.")]
+    PolicyCapacityUnavailable,
     #[error("Flex capacity unavailable.")]
     FlexUnavailable,
     #[error("{message}")]
@@ -448,10 +451,12 @@ impl CodexErr {
             // Capacity errors can be returned without a `Retry-After` header. Treat those
             // responses as transient and use the same bounded local backoff as other retryable
             // stream failures. The caller still owns the retry budget.
-            CodexErrorDetails::ServerOverloaded => Some(
-                self.server_retry_delay()
-                    .unwrap_or_else(|| backoff(retry_count).min(Duration::from_secs(60))),
-            ),
+            CodexErrorDetails::ServerOverloaded | CodexErrorDetails::PolicyCapacityUnavailable => {
+                Some(
+                    self.server_retry_delay()
+                        .unwrap_or_else(|| backoff(retry_count).min(Duration::from_secs(60))),
+                )
+            }
             CodexErrorDetails::RetryLimit(_) => self.server_retry_delay(),
             CodexErrorDetails::Stream(..)
             | CodexErrorDetails::ContentFilter
@@ -508,6 +513,9 @@ impl CodexErr {
             | CodexErrorDetails::QuotaExceeded
             | CodexErrorDetails::UsageNotIncluded => CodexErrorInfo::UsageLimitExceeded,
             CodexErrorDetails::ServerOverloaded => CodexErrorInfo::ServerOverloaded,
+            CodexErrorDetails::PolicyCapacityUnavailable => {
+                CodexErrorInfo::PolicyCapacityUnavailable
+            }
             CodexErrorDetails::FlexUnavailable => CodexErrorInfo::FlexUnavailable,
             CodexErrorDetails::CyberPolicy { .. } => CodexErrorInfo::CyberPolicy,
             CodexErrorDetails::BioPolicy { .. } => CodexErrorInfo::BioPolicy,

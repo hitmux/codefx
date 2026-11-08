@@ -11,6 +11,46 @@ fn map_api_error_maps_server_overloaded() {
     assert!(matches!(err.details(), CodexErrorDetails::ServerOverloaded));
 }
 
+#[tokio::test(start_paused = true)]
+async fn http_policy_capacity_preserves_retry_advice_and_local_backoff() {
+    use std::time::Duration;
+    for (code, expected) in [
+        (
+            "policy_capacity_unavailable",
+            CodexErrorInfo::PolicyCapacityUnavailable,
+        ),
+        ("server_is_overloaded", CodexErrorInfo::ServerOverloaded),
+    ] {
+        for advice in [RetryAfter::from_delay(Duration::from_secs(3)), None] {
+            let error = map_api_error(ApiError::Transport(TransportError::Http {
+                status: http::StatusCode::SERVICE_UNAVAILABLE,
+                url: None,
+                headers: None,
+                body: Some(
+                    serde_json::json!({"error": {
+                        "code": code, "type": "service_unavailable_error",
+                    }})
+                    .to_string(),
+                ),
+                retry_after: advice,
+            }));
+            assert_eq!(
+                (error.to_codex_protocol_error(), error.retry_after()),
+                (expected.clone(), advice)
+            );
+            if advice.is_some() {
+                assert_eq!(
+                    error.retry_delay(/*retry_count*/ 1),
+                    Some(Duration::from_secs(3))
+                );
+            } else {
+                // Capacity errors without Retry-After must still use local backoff.
+                assert!(error.retry_delay(/*retry_count*/ 1).is_some(), "{code}");
+            }
+        }
+    }
+}
+
 #[test]
 fn map_api_error_preserves_content_filter_retry_and_public_error() {
     let err = map_api_error(ApiError::ContentFilter);
@@ -133,7 +173,7 @@ fn map_http_error_classifies_provider_codes() {
             503,
             "server_is_overloaded",
             CodexErrorInfo::ServerOverloaded,
-            false,
+            true,
         ),
         (503, "slow_down", CodexErrorInfo::RateLimitExceeded, true),
         (

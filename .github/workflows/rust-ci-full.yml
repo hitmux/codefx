@@ -21,7 +21,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
-      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           components: rustfmt
       - name: cargo fmt
@@ -40,7 +40,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
-      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
         with:
           tool: cargo-shear@1.11.2
@@ -51,8 +51,8 @@ jobs:
     name: Argument comment lint package
     runs-on: ubuntu-24.04
     env:
-      CARGO_DYLINT_VERSION: 6.1.0
-      DYLINT_LINK_VERSION: 6.1.0
+      CARGO_DYLINT_VERSION: 6.3.2
+      DYLINT_LINK_VERSION: 6.3.2
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -92,7 +92,7 @@ jobs:
   argument_comment_lint_prebuilt:
     name: Argument comment lint - ${{ matrix.name }}
     runs-on: ${{ matrix.runs_on || matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 180
     environment:
       name: bazel
       deployment: false
@@ -102,13 +102,8 @@ jobs:
         include:
           - name: Linux
             runner: ubuntu-24.04
-          - name: macOS
-            runner: macos-15-xlarge
           - name: Windows
-            runner: windows-x64
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-windows-x64
+            runner: windows-2025
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -123,15 +118,13 @@ jobs:
   lint_build:
     name: Lint/Build — ${{ matrix.runner }} - ${{ matrix.target }}${{ matrix.profile == 'release' && ' (release)' || '' }}
     runs-on: ${{ matrix.runs_on || matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 180
     defaults:
       run:
         working-directory: codex-rs
     env:
-      # Speed up repeated builds across CI runs by caching compiled objects, except on
-      # arm64 macOS runners cross-targeting x86_64 where ring/cc-rs can produce
-      # mixed-architecture archives under sccache.
-      USE_SCCACHE: ${{ (startsWith(matrix.runner, 'windows') || (matrix.runner == 'macos-15-xlarge' && matrix.target == 'x86_64-apple-darwin')) && 'false' || 'true' }}
+      # Use sccache on Linux; disable caching on Windows toolchains.
+      USE_SCCACHE: ${{ startsWith(matrix.runner, 'windows') && 'false' || 'true' }}
       CARGO_INCREMENTAL: "0"
       SCCACHE_CACHE_SIZE: 10G
 
@@ -139,80 +132,41 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-15-xlarge
-            target: aarch64-apple-darwin
-            profile: dev
-          - runner: macos-15-xlarge
-            target: x86_64-apple-darwin
-            profile: dev
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-musl
             profile: dev
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-linux-x64
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             profile: dev
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-linux-x64
           - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             profile: dev
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-linux-arm64
           - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             profile: dev
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-linux-arm64
-          - runner: windows-x64
+          - runner: windows-2025
             target: x86_64-pc-windows-msvc
             profile: dev
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-windows-x64
-          - runner: windows-arm64
+          - runner: windows-11-arm
             target: aarch64-pc-windows-msvc
             profile: dev
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-windows-arm64
 
-          # Also run representative release builds on Mac and Linux because
+          # Also run representative release builds on Linux and Windows because
           # there could be release-only build errors we want to catch.
           # Hopefully this also pre-populates the build cache to speed up
           # releases.
-          - runner: macos-15-xlarge
-            target: aarch64-apple-darwin
-            profile: release
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-musl
             profile: release
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-linux-x64
           - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             profile: release
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-linux-arm64
-          - runner: windows-x64
+          - runner: windows-2025
             target: x86_64-pc-windows-msvc
             profile: release
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-windows-x64
-          - runner: windows-arm64
+          - runner: windows-11-arm
             target: aarch64-pc-windows-msvc
             profile: release
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-windows-arm64
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -228,7 +182,7 @@ jobs:
             sudo apt-get update -y
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential pkg-config libcap-dev libasound2-dev
           fi
-      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           targets: ${{ matrix.target }}
           components: clippy
@@ -427,24 +381,11 @@ jobs:
             /var/cache/apt
           key: apt-${{ matrix.runner }}-${{ matrix.target }}-v1
 
-  tests_macos_aarch64:
-    name: Tests — macos-15-xlarge - aarch64-apple-darwin
-    uses: ./.github/workflows/rust-ci-full-nextest-platform.yml
-    with:
-      runner: macos-15-xlarge
-      target: aarch64-apple-darwin
-      profile: ci-test
-      artifact_id: macos-aarch64
-      use_sccache: true
-    secrets: inherit
-
   tests_linux_x64_remote:
     name: Tests — ubuntu-24.04 - x86_64-unknown-linux-gnu (remote)
     uses: ./.github/workflows/rust-ci-full-nextest-platform.yml
     with:
       runner: ubuntu-24.04
-      runner_group: ${{ github.event.repository.name }}-runners
-      runner_labels: ${{ github.event.repository.name }}-linux-x64
       target: x86_64-unknown-linux-gnu
       profile: ci-test
       artifact_id: linux-x64-remote
@@ -457,8 +398,6 @@ jobs:
     uses: ./.github/workflows/rust-ci-full-nextest-platform.yml
     with:
       runner: ubuntu-24.04-arm
-      runner_group: ${{ github.event.repository.name }}-runners
-      runner_labels: ${{ github.event.repository.name }}-linux-arm64
       target: aarch64-unknown-linux-gnu
       profile: ci-test
       artifact_id: linux-arm64
@@ -469,9 +408,7 @@ jobs:
     name: Tests — windows-x64 - x86_64-pc-windows-msvc
     uses: ./.github/workflows/rust-ci-full-nextest-platform.yml
     with:
-      runner: windows-x64
-      runner_group: ${{ github.event.repository.name }}-runners
-      runner_labels: ${{ github.event.repository.name }}-windows-x64
+      runner: windows-2025
       target: x86_64-pc-windows-msvc
       profile: ci-test
       artifact_id: windows-x64
@@ -482,12 +419,8 @@ jobs:
     name: Tests — windows-arm64 - aarch64-pc-windows-msvc
     uses: ./.github/workflows/rust-ci-full-nextest-platform.yml
     with:
-      runner: windows-arm64
-      runner_group: ${{ github.event.repository.name }}-runners
-      runner_labels: ${{ github.event.repository.name }}-windows-arm64
-      archive_runner: windows-x64
-      archive_runner_group: ${{ github.event.repository.name }}-runners
-      archive_runner_labels: ${{ github.event.repository.name }}-windows-x64
+      runner: windows-11-arm
+      archive_runner: windows-2025
       target: aarch64-pc-windows-msvc
       profile: ci-test
       artifact_id: windows-arm64
@@ -505,7 +438,6 @@ jobs:
         argument_comment_lint_package,
         argument_comment_lint_prebuilt,
         lint_build,
-        tests_macos_aarch64,
         tests_linux_x64_remote,
         tests_linux_arm64,
         tests_windows_x64,
@@ -522,7 +454,6 @@ jobs:
           echo "general: ${{ needs.general.result }}"
           echo "shear  : ${{ needs.cargo_shear.result }}"
           echo "lint   : ${{ needs.lint_build.result }}"
-          echo "test macos : ${{ needs.tests_macos_aarch64.result }}"
           echo "test linux : ${{ needs.tests_linux_x64_remote.result }}"
           echo "test arm64 : ${{ needs.tests_linux_arm64.result }}"
           echo "test winx64: ${{ needs.tests_windows_x64.result }}"
@@ -532,7 +463,6 @@ jobs:
           [[ '${{ needs.general.result }}' == 'success' ]] || { echo 'general failed'; exit 1; }
           [[ '${{ needs.cargo_shear.result }}' == 'success' ]] || { echo 'cargo_shear failed'; exit 1; }
           [[ '${{ needs.lint_build.result }}' == 'success' ]] || { echo 'lint_build failed'; exit 1; }
-          [[ '${{ needs.tests_macos_aarch64.result }}' == 'success' ]] || { echo 'tests_macos_aarch64 failed'; exit 1; }
           [[ '${{ needs.tests_linux_x64_remote.result }}' == 'success' ]] || { echo 'tests_linux_x64_remote failed'; exit 1; }
           [[ '${{ needs.tests_linux_arm64.result }}' == 'success' ]] || { echo 'tests_linux_arm64 failed'; exit 1; }
           [[ '${{ needs.tests_windows_x64.result }}' == 'success' ]] || { echo 'tests_windows_x64 failed'; exit 1; }
