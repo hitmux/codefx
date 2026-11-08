@@ -90,7 +90,10 @@ async fn standalone_initializes_reports_version_and_runs_helpers() -> anyhow::Re
         assert_eq!(response["id"], 1);
         assert!(response["result"]["sessionId"].is_string(), "{response}");
         let environment = response["result"]["environmentInfo"].clone();
-        assert_eq!(environment["executorVersion"], env!("CARGO_PKG_VERSION"));
+        // A source/Bazel build has no package manifest and advertises 0.0.0;
+        // packaged releases obtain their version from the installed manifest.
+        let runtime_version = codex_build_info::BuildInfo::get().version().to_string();
+        assert_eq!(environment["executorVersion"], runtime_version.as_str());
         let initialized = json!({"method": "initialized", "params": {}});
         let info = json!({"id": 2, "method": "environment/info", "params": {}});
         stdin
