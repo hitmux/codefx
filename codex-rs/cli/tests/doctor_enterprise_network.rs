@@ -222,7 +222,10 @@ async fn network_only_human_output() -> Result<()> {
     assert!(output.status.success(), "{stdout}");
     // Keep snapshots stable across release versions while checking the real CLI version.
     let version_header = format!("Codex Doctor v{}", env!("CARGO_PKG_VERSION"));
-    assert!(stdout.starts_with(&version_header), "unexpected doctor version: {stdout}");
+    assert!(
+        stdout.starts_with(&version_header),
+        "unexpected doctor version: {stdout}"
+    );
     let stdout = stdout.replacen(&version_header, "Codex Doctor v0.0.0", 1);
     insta::assert_snapshot!("network_only_human_output", stdout);
     Ok(())
@@ -248,7 +251,10 @@ async fn network_only_config_failure_human_output() -> Result<()> {
     assert!(file_row.is_match(&stdout), "{stdout}");
     let stdout = file_row.replace_all(&stdout, "${1}<CODEX_HOME>/config.toml");
     let version_header = format!("Codex Doctor v{}", env!("CARGO_PKG_VERSION"));
-    assert!(stdout.starts_with(&version_header), "unexpected doctor version: {stdout}");
+    assert!(
+        stdout.starts_with(&version_header),
+        "unexpected doctor version: {stdout}"
+    );
     let stdout = stdout.replacen(&version_header, "Codex Doctor v0.0.0", 1);
     insta::assert_snapshot!("network_only_config_failure_human_output", stdout);
     Ok(())
