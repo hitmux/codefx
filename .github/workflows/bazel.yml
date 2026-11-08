@@ -220,9 +220,9 @@ jobs:
     # BuildBuddy credentials use Linux RBE for build actions; test execution
     # remains on a Windows runner.
     timeout-minutes: 180
-    needs: test
-    # Preserve coverage after a failed Linux dependency, but stop all queued
-    # Windows shards promptly when a newer PR revision cancels this run.
+    # Windows cross-target actions have their own cache namespace.
+    # Start these shards alongside Linux tests to shorten the critical path.
+    # A superseding PR revision still cancels queued Windows work.
     if: ${{ always() && !cancelled() }}
     strategy:
       fail-fast: false
@@ -418,15 +418,15 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   clippy:
-    # Run after the platform test matrix so the shared Bazel action cache is
-    # warm before lint builds start. The always() guard keeps lint diagnostics
-    # available even when a test leg fails.
+    # Wait for both platform test matrices to warm target-specific Bazel caches.
+    # Linux and Windows Clippy jobs use separate target cache namespaces.
+    # The always() guard keeps diagnostics available after failed tests.
     needs: [test, test-windows-shard]
     if: ${{ always() && !cancelled() }}
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 2
       matrix:
         include:
           # Retain Linux x64 and Windows gnullvm lint coverage on the CI toolchains.
@@ -527,14 +527,14 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   verify-release-build:
-    # Reuse the action cache populated by tests and clippy instead of starting
-    # two cold Bazel graphs in parallel.
+    # Wait for Clippy to warm target-specific caches, then verify Linux and
+    # Windows release builds concurrently with isolated cache namespaces.
     needs: clippy
     if: ${{ always() && !cancelled() }}
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 2
       matrix:
         include:
           - os: ubuntu-24.04
