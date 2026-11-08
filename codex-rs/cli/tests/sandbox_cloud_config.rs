@@ -173,9 +173,12 @@ async fn run_cloud_sandbox(args: &[&str], bundle: Value) -> Result<Option<TempDi
         stderr,
     );
     if !nested_macos_sandbox_unavailable {
+        let version_stdout = String::from_utf8(output.stdout)?;
+        let command_name = version_stdout.split_whitespace().next().unwrap_or("");
         assert!(
-            String::from_utf8(output.stdout)?.starts_with("codex"),
-            "expected the sandboxed Codex version command to run",
+            command_name.eq_ignore_ascii_case("codex")
+                || command_name.eq_ignore_ascii_case("codefx"),
+            "expected the sandboxed Codex/Codefx version command to run, got: {version_stdout:?}",
         );
     }
 
