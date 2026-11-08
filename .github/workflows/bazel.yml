@@ -61,9 +61,9 @@ jobs:
         with:
           path: ${{ runner.temp }}/codefx-bazel-actions
           key: codefx-bazel-actions-v2-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}-${{ github.sha }}
+          # Prefer a recent snapshot for the same toolchain, then fall
+          # back to older compatible snapshots across upstream syncs.
           restore-keys: |
-            # Prefer a recent snapshot for the same toolchain, then fall
-            # back to older compatible snapshots across upstream syncs.
             codefx-bazel-actions-v2-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}-
             codefx-bazel-actions-v2-${{ matrix.target }}-
             codefx-bazel-actions-v1-${{ matrix.target }}-
