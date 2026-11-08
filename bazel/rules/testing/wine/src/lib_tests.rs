@@ -370,7 +370,9 @@ async fn pinned_powershell_runs_under_wine_with_a_pty() -> Result<()> {
         codex_utils_pty::ChildFds::Inherited(&[]),
     )
     .await?;
-    let command_result = timeout(Duration::from_secs(30), async {
+    // Cold Wine + PowerShell startup under concurrent CI compilation can exceed
+    // 30 seconds. Keep a bounded timeout within the five-minute Bazel test budget.
+    let command_result = timeout(Duration::from_secs(120), async {
         let stdout = async {
             let mut output = Vec::new();
             while let Some(chunk) = stdout_rx.recv().await {
