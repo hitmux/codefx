@@ -83,7 +83,7 @@ jobs:
       deployment: false
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 10
       matrix:
         include:
           - runner: ubuntu-24.04
@@ -276,7 +276,7 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 10
       matrix:
         include:
           - runner: windows-2025
