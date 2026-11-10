@@ -65,7 +65,17 @@ jobs:
         run: python3 scripts/readme_toc.py README.md
 
       - name: Check formatting (run `just fmt` to fix)
-        run: just fmt-check
+        shell: bash
+        run: |
+          if ! just fmt-check; then
+            # Keep the original formatter failure visible and print an
+            # actionable diff for the fork-specific CI maintenance scripts.
+            uv run --frozen --project scripts ruff format --diff \
+              .github/scripts/bound_bazel_action_cache.py \
+              .github/scripts/check_upstream_ci.py \
+              .github/scripts/ci_storage_cleanup.py || true
+            exit 1
+          fi
 
       - name: Prettier (run `pnpm run format:fix` to fix)
         run: pnpm run format
