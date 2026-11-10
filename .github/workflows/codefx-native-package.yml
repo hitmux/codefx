@@ -83,15 +83,42 @@ jobs:
         with:
           toolchain: "1.99.1"
           targets: ${{ inputs.target }}
-      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7
+      - name: Restore shared Linux Cargo sources
         if: steps.prepare.outputs.reuse != 'true'
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            codex-rs/target
-          key: codefx-native-${{ inputs.target }}-v1-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
-          restore-keys: codefx-native-${{ inputs.target }}-v1-
+          # Registry and git sources are architecture-neutral; avoid a second copy.
+          key: codefx-native-deps-linux-v2-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
+          restore-keys: |
+            codefx-native-deps-linux-v2-
+
+      - name: Install sccache
+        if: steps.prepare.outputs.reuse != 'true'
+        uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: sccache
+          version: 0.8.2
+
+      - name: Restore bounded Linux native compilation cache
+        if: steps.prepare.outputs.reuse != 'true'
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ${{ runner.temp }}/codefx-native-sccache
+          key: codefx-native-sccache-v2-${{ inputs.target }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: |
+            codefx-native-sccache-v2-${{ inputs.target }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}-
+            codefx-native-sccache-v2-${{ inputs.target }}-
+
+      - name: Enable bounded sccache
+        if: steps.prepare.outputs.reuse != 'true'
+        run: |
+          mkdir -p "${RUNNER_TEMP}/codefx-native-sccache"
+          echo "RUSTC_WRAPPER=sccache" >> "${GITHUB_ENV}"
+          echo "SCCACHE_DIR=${RUNNER_TEMP}/codefx-native-sccache" >> "${GITHUB_ENV}"
+          echo "SCCACHE_CACHE_SIZE=1G" >> "${GITHUB_ENV}"
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         if: runner.os == 'Linux' && steps.prepare.outputs.reuse != 'true'
         with: { version: 0.14.0, use-cache: false }
@@ -115,6 +142,11 @@ jobs:
           fi
           export STABLE_GIT_COMMIT="$(git rev-parse HEAD)"
           cargo build --locked --release --target "$TARGET" "${bins[@]}"
+      - name: Report Linux native compiler cache efficiency
+        if: ${{ always() && !cancelled() && steps.prepare.outputs.reuse != 'true' }}
+        continue-on-error: true
+        run: sccache --show-stats
+
       - name: Assemble platform package
         if: steps.prepare.outputs.reuse != 'true'
         run: |
