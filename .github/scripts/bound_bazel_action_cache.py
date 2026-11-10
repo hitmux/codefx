@@ -43,7 +43,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.max_gib < 1:
         parser.error("--max-gib must be positive")
-    removed, retained = bound_cache(args.path, args.max_gib * 1024 ** 3)
+    removed, retained = bound_cache(args.path, args.max_gib * 1024**3)
     print(
         f"Bazel cache: removed {removed} files; retained {retained / (1024**3):.2f} GiB"
     )

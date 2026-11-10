@@ -59,7 +59,10 @@ for obsolete in (
     "rusty-v8-release.yml",
     "rust-release-argument-comment-lint.yml",
 ):
-    require(not (WF / obsolete).exists(), f"Obsolete upstream publisher restored: {obsolete}")
+    require(
+        not (WF / obsolete).exists(),
+        f"Obsolete upstream publisher restored: {obsolete}",
+    )
 
 # Every local reusable workflow call must resolve after any upstream file move.
 for path in WF.glob("*.yml"):
@@ -117,7 +120,9 @@ for target in ("x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"):
     ):
         require(target in content, f"{label}: missing release target {target}")
 for label, content in (("platforms", platforms), ("smoke", smoke)):
-    require("pc-windows-msvc" not in content, f"{label}: Windows release target restored")
+    require(
+        "pc-windows-msvc" not in content, f"{label}: Windows release target restored"
+    )
 require(
     'targets=("x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl")' in release,
     "Release gate must require exactly two Linux packages",

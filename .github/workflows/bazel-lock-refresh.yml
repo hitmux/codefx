@@ -1,0 +1,54 @@
+# Temporary one-shot lockfile regeneration for the Linux-only PR.
+# Remove this workflow after the lock update lands on the PR branch.
+name: Codefx one-shot Bazel lock refresh
+on:
+  push:
+    branches:
+      - ci/linux-only-cache-20261110
+    paths:
+      - .github/workflows/bazel-lock-refresh.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: codefx-bazel-lock-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.repository == 'hitmux/codefx' && github.ref == 'refs/heads/ci/linux-only-cache-20261110'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout exact branch head for lock generation
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ci/linux-only-cache-20261110
+          persist-credentials: true
+      - name: Prepare Linux Bazel toolchain
+        uses: ./.github/actions/prepare-bazel-ci
+        with:
+          target: x86_64-unknown-linux-gnu
+          cache-scope: bazel-lockfile
+          action-cache: 'false'
+      - name: Update the Bazel extension lock against Cargo.lock
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/run_bazel_with_buildbuddy.py mod deps --lockfile_mode=update
+          test -s MODULE.bazel.lock
+          git diff --stat -- MODULE.bazel.lock
+          if git diff --quiet -- MODULE.bazel.lock; then
+            echo "Bazel lockfile is already synchronized."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- MODULE.bazel.lock
+          git commit -m 'build: regenerate Bazel lock after OpenSSL security update'
+          git push origin HEAD:refs/heads/ci/linux-only-cache-20261110

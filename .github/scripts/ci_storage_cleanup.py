@@ -84,11 +84,11 @@ def main() -> None:
                 candidates.append(("artifact", obj))
 
     candidates.sort(
-        key=lambda item: item[1].get("last_accessed_at")
-        or item[1].get("created_at")
-        or ""
+        key=lambda item: (
+            item[1].get("last_accessed_at") or item[1].get("created_at") or ""
+        )
     )
-    eligible = candidates[:args.max_delete]
+    eligible = candidates[: args.max_delete]
     total_bytes = 0
     for kind, obj in eligible:
         ident = obj["id"]
