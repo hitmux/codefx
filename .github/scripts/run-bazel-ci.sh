@@ -317,6 +317,15 @@ if [[ -n "${BAZEL_REPOSITORY_CACHE:-}" ]]; then
   post_config_bazel_args+=("--repository_cache=${BAZEL_REPOSITORY_CACHE}")
 fi
 
+# All Linux Bazel jobs reuse the same action-cache directory and cap it to
+# 2 GiB per target to avoid duplicating huge output-base trees on the runner.
+if [[ -n "${CODEFX_BAZEL_ACTION_CACHE:-}" ]]; then
+  post_config_bazel_args+=(
+    "--disk_cache=${CODEFX_BAZEL_ACTION_CACHE}"
+    "--experimental_disk_cache_gc_max_size=2G"
+  )
+fi
+
 if [[ -n "${CODEX_BAZEL_EXECUTION_LOG_COMPACT_DIR:-}" ]]; then
   post_config_bazel_args+=(
     "--execution_log_compact_file=${CODEX_BAZEL_EXECUTION_LOG_COMPACT_DIR}/execution-log-${bazel_args[0]}-${GITHUB_JOB:-local}-$$.zst"

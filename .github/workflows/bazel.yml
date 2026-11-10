@@ -120,8 +120,6 @@ jobs:
             test
             --build_tests_only
             --skip_incompatible_explicit_targets
-            --disk_cache=${RUNNER_TEMP}/codefx-bazel-actions
-            --experimental_disk_cache_gc_max_size=2G
             --test_tag_filters=-argument-comment-lint
             --test_verbose_timeout_warnings
             --build_metadata=COMMIT_SHA=${GITHUB_SHA}
@@ -159,35 +157,7 @@ jobs:
       - name: Bound Linux Bazel compiled action cache
         if: ${{ always() && !cancelled() && matrix.shard == 1 && steps.restore_linux_actions.outputs.cache-hit != 'true' }}
         shell: bash
-        run: |
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          cache = Path(os.environ["RUNNER_TEMP"]) / "codefx-bazel-actions"
-          limit = 2 * 1024 ** 3
-          files = []
-          for directory, _, names in os.walk(cache):
-              for name in names:
-                  path = Path(directory) / name
-                  if path.is_symlink():
-                      continue
-                  try:
-                      stat = path.stat()
-                  except FileNotFoundError:
-                      continue
-                  files.append((max(stat.st_atime_ns, stat.st_mtime_ns), path, stat.st_size))
-          size = sum(length for _, _, length in files)
-          for _, path, length in sorted(files):
-              if size <= limit:
-                  break
-              try:
-                  path.unlink()
-              except FileNotFoundError:
-                  continue
-              size -= length
-          print(f"Bazel action cache snapshot: {size / 1024 ** 3:.2f} GiB")
-          PY
+        run: python3 .github/scripts/bound_bazel_action_cache.py "${RUNNER_TEMP}/codefx-bazel-actions" --max-gib 2
 
       - name: Save bounded Linux Bazel compiled action cache
         if: ${{ always() && !cancelled() && matrix.shard == 1 && steps.restore_linux_actions.outputs.cache-hit != 'true' }}
@@ -205,6 +175,7 @@ jobs:
           name: bazel-execution-logs-test-${{ matrix.target }}-shard-${{ matrix.shard }}
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
+          retention-days: 3
 
       # Save the job-scoped Bazel repository cache after cache misses. Keep the
       # upload non-fatal so cache service issues never fail the job itself.
@@ -311,6 +282,12 @@ jobs:
           name: bazel-execution-logs-clippy-${{ matrix.target }}
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Bound Linux Bazel compiled cache before snapshot save
+        if: ${{ always() && !cancelled() }}
+        shell: bash
+        run: python3 .github/scripts/bound_bazel_action_cache.py "${RUNNER_TEMP}/codefx-bazel-actions" --max-gib 2
 
       # Save the job-scoped Bazel repository cache after cache misses. Keep the
       # upload non-fatal so cache service issues never fail the job itself.
@@ -432,6 +409,12 @@ jobs:
           name: bazel-execution-logs-verify-release-build-${{ matrix.target }}
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Bound Linux Bazel compiled cache before snapshot save
+        if: ${{ always() && !cancelled() }}
+        shell: bash
+        run: python3 .github/scripts/bound_bazel_action_cache.py "${RUNNER_TEMP}/codefx-bazel-actions" --max-gib 2
 
       # Save the job-scoped Bazel repository cache after cache misses. Keep the
       # upload non-fatal so cache service issues never fail the job itself.
