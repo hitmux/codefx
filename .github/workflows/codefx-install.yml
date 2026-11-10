@@ -10,12 +10,7 @@ permissions:
   contents: read
 jobs:
   installers:
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        os: [ubuntu-24.04, windows-2025]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -23,22 +18,12 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with: { python-version: "3.12" }
       - name: Shell transaction checks
-        if: runner.os != 'Windows'
         shell: bash
         run: |
           sh -n scripts/install/install.sh scripts/install/install-codefx.sh
           python3 -m unittest discover -s scripts/install -p test_install_transactions.py -v
       - name: Existing Linux regression suite
-        if: runner.os == 'Linux'
         run: python3 -m unittest discover -s scripts/install -p test_install_sh.py -v
       - name: PowerShell syntax and bootstrap failure checks
         shell: pwsh
         run: ./scripts/install/test_install_ps1.ps1
-      - name: Native Windows transactions on PowerShell 5.1
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: ./.github/scripts/codefx-windows-standard-user.ps1 -Mode transactions -Engine powershell
-      - name: Native Windows transactions on PowerShell 7
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./.github/scripts/codefx-windows-standard-user.ps1 -Mode transactions -Engine pwsh

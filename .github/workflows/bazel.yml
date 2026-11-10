@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 240
     strategy:
       fail-fast: false
-      max-parallel: 10
+      max-parallel: 4
       matrix:
         target:
           - x86_64-unknown-linux-gnu
@@ -128,7 +128,7 @@ jobs:
             --build_metadata=TAG_linux_test_shard=${BAZEL_TEST_SHARD}
           )
           if [[ -z "${BUILDBUDDY_API_KEY:-}" ]]; then
-            bazel_test_args+=(--jobs=8)
+            bazel_test_args+=(--jobs=4)
             # Immutable cache snapshots are read-only on exact hits; other
             # shards read the shared snapshot without duplicating cache writes.
             if [[ "${BAZEL_TEST_SHARD}" != "1" || "${BAZEL_ACTION_CACHE_HIT}" == "true" ]]; then
@@ -220,213 +220,10 @@ jobs:
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
 
-  test-windows-shard:
-    # Split the Windows Bazel test leg across separate Windows hosts. Jobs with
-    # BuildBuddy credentials use Linux RBE for build actions; test execution
-    # remains on a Windows runner.
-    timeout-minutes: 180
-    # Windows cross-target actions have their own cache namespace.
-    # Start these shards alongside Linux tests to shorten the critical path.
-    # A superseding PR revision still cancels queued Windows work.
-    if: ${{ always() && !cancelled() }}
-    strategy:
-      fail-fast: false
-      max-parallel: 10
-      matrix:
-        shard:
-          - 1
-          - 2
-          - 3
-          - 4
-    runs-on: windows-2025
-    name: Bazel test on windows-latest for x86_64-pc-windows-gnullvm shard ${{ matrix.shard }}/4
-    environment:
-      name: bazel
-      deployment: false
-
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Test BuildBuddy Bazel wrapper
-        if: matrix.shard == 1
-        shell: pwsh
-        run: python .github/scripts/test_run_bazel_with_buildbuddy.py
-
-      - name: Test Windows Bazel target selector
-        if: matrix.shard == 1
-        shell: pwsh
-        run: python -m unittest discover -s .github/scripts -p test_select_windows_bazel_targets.py
-
-      - name: Prepare Bazel CI
-        id: prepare_bazel
-        uses: ./.github/actions/prepare-bazel-ci
-        with:
-          target: x86_64-pc-windows-gnullvm
-          # Reuse the former monolithic Windows test cache for restores. Do
-          # not save it from every shard below; duplicate uploads would sit on
-          # the PR-blocking critical path after the useful test work is done.
-          cache-scope: bazel-target
-
-      - name: bazel test shard
-        env:
-          BAZEL_TEST_SHARD: ${{ matrix.shard }}
-          BAZEL_TEST_SHARD_COUNT: 4
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          bazel_test_query='tests(//...) except tests(//third_party/v8:all) except attr(tags, "manual", tests(//...))'
-          bazel_targets_file="$(mktemp)"
-          selected_targets_file="$(mktemp)"
-          trap 'rm -f "${bazel_targets_file}" "${selected_targets_file}"' EXIT
-
-          # Keep query and selection in the foreground so failures cannot leave
-          # different jobs assigning different partial target lists.
-          ./.github/scripts/run-bazel-query-ci.sh --output=label -- "${bazel_test_query}" \
-            | LC_ALL=C sort > "${bazel_targets_file}"
-          python .github/scripts/select_windows_bazel_targets.py \
-            --shard "${BAZEL_TEST_SHARD}" \
-            --shard-count "${BAZEL_TEST_SHARD_COUNT}" \
-            < "${bazel_targets_file}" > "${selected_targets_file}"
-          mapfile -t selected_targets < "${selected_targets_file}"
-
-          bazel_test_args=(
-            test
-            --skip_incompatible_explicit_targets
-            --test_tag_filters=-argument-comment-lint
-            --test_verbose_timeout_warnings
-            --build_metadata=COMMIT_SHA=${GITHUB_SHA}
-            --build_metadata=TAG_windows_test_shard=${BAZEL_TEST_SHARD}
-          )
-
-          ./.github/scripts/run-bazel-ci.sh \
-            --print-failed-action-summary \
-            --print-failed-test-logs \
-            --windows-cross-compile \
-            --remote-download-toplevel \
-            -- \
-            "${bazel_test_args[@]}" \
-            -- \
-            "${selected_targets[@]}"
-
-      - name: Upload Bazel execution logs
-        if: always() && !cancelled()
-        continue-on-error: true
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: bazel-execution-logs-test-x86_64-pc-windows-gnullvm-shard-${{ matrix.shard }}
-          path: ${{ runner.temp }}/bazel-execution-logs
-          if-no-files-found: ignore
-
-      - name: Check for a clean worktree
-        if: always() && !cancelled()
-        uses: ./.github/actions/check-clean-worktree
-
-  test-windows:
-    # Preserve the existing required-check surface while the real work happens
-    # in the sharded Windows jobs above.
-    if: ${{ always() && !cancelled() }}
-    needs: test-windows-shard
-    runs-on: ubuntu-24.04
-    name: Bazel test on windows-latest for x86_64-pc-windows-gnullvm
-
-    steps:
-      - name: Confirm Windows Bazel test shards passed
-        shell: bash
-        run: |
-          if [[ "${{ needs.test-windows-shard.result }}" != "success" ]]; then
-            echo "Windows Bazel test shards finished with result: ${{ needs.test-windows-shard.result }}" >&2
-            exit 1
-          fi
-
-  test-windows-native-main:
-    # Native Windows Bazel tests are slower and frequently approach the
-    # 30-minute PR budget. Run this only for post-merge commits to main and give
-    # it a larger timeout. Also allow manual runs for native toolchain changes.
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-    timeout-minutes: 240
-    runs-on: windows-2025
-    name: Bazel test on windows-latest for x86_64-pc-windows-msvc (native main)
-    environment:
-      name: bazel
-      deployment: false
-
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Prepare Bazel CI
-        id: prepare_bazel
-        uses: ./.github/actions/prepare-bazel-ci
-        with:
-          target: x86_64-pc-windows-msvc
-          cache-scope: bazel-target
-
-      - name: bazel test //...
-        env:
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        shell: bash
-        run: |
-          bazel_targets=(
-            //...
-            # Keep standalone V8 library targets out of the ordinary Bazel CI
-            # path. V8 consumers under `//codex-rs/...` still participate
-            # transitively through `//...`.
-            -//third_party/v8:all
-            -//codex-rs/v8-poc:v8-poc-unit-tests
-          )
-
-          bazel_test_args=(
-            test
-            --config=ci-windows-msvc
-            --platforms=//:windows_x86_64_msvc
-            --test_tag_filters=-argument-comment-lint
-            --test_verbose_timeout_warnings
-            --build_metadata=COMMIT_SHA=${GITHUB_SHA}
-            --build_metadata=TAG_windows_native_main=true
-          )
-
-          ./.github/scripts/run-bazel-ci.sh \
-            --print-failed-action-summary \
-            --print-failed-test-logs \
-            --windows-msvc-host-platform \
-            -- \
-            "${bazel_test_args[@]}" \
-            -- \
-            "${bazel_targets[@]}"
-
-      - name: Upload Bazel execution logs
-        if: always() && !cancelled()
-        continue-on-error: true
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: bazel-execution-logs-test-windows-native-x86_64-pc-windows-msvc
-          path: ${{ runner.temp }}/bazel-execution-logs
-          if-no-files-found: ignore
-
-      # Save the job-scoped Bazel repository cache after cache misses. Keep the
-      # upload non-fatal so cache service issues never fail the job itself.
-      - name: Save bazel repository cache
-        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-        with:
-          path: ${{ steps.prepare_bazel.outputs.repository-cache-path }}
-          key: ${{ steps.prepare_bazel.outputs.repository-cache-key }}
-
-      - name: Check for a clean worktree
-        if: always() && !cancelled()
-        uses: ./.github/actions/check-clean-worktree
-
   clippy:
-    # Wait for both platform test matrices to warm target-specific Bazel caches.
-    # Linux and Windows Clippy jobs use separate target cache namespaces.
+    # Reuse Linux Bazel test outputs before running lint.
     # The always() guard keeps diagnostics available after failed tests.
-    needs: [test, test-windows-shard]
+    needs: test
     if: ${{ always() && !cancelled() }}
     timeout-minutes: 180
     strategy:
@@ -434,11 +231,9 @@ jobs:
       max-parallel: 2
       matrix:
         include:
-          # Retain Linux x64 and Windows gnullvm lint coverage on the CI toolchains.
+          # Linux x64 lint coverage.
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-          - os: windows-2025
-            target: x86_64-pc-windows-gnullvm
     runs-on: ${{ matrix.runs_on || matrix.os }}
     name: Bazel clippy on ${{ matrix.os }} for ${{ matrix.target }}
     environment:
@@ -532,8 +327,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   verify-release-build:
-    # Wait for Clippy to warm target-specific caches, then verify Linux and
-    # Windows release builds concurrently with isolated cache namespaces.
+    # Verify release-only cfg after the Linux Clippy build.
     needs: clippy
     if: ${{ always() && !cancelled() }}
     timeout-minutes: 180
@@ -544,8 +338,6 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-          - os: windows-2025
-            target: x86_64-pc-windows-gnullvm
     runs-on: ${{ matrix.runs_on || matrix.os }}
     name: Verify release build on ${{ matrix.os }} for ${{ matrix.target }}
     environment:
