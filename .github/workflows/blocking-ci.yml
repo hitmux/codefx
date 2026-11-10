@@ -62,10 +62,24 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  ci-policy:
+    name: Linux CI policy / upstream-sync preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Verify Linux-only workflows, references, cache strategy and release gate
+        run: python3 .github/scripts/check_upstream_ci.py
+
   # Keep reusable workflow calls alphabetized. The `required` job below is the
   # version-controlled list that the main-branch ruleset should require.
   bazel:
     name: Bazel
+    needs: ci-policy
     uses: ./.github/workflows/bazel.yml
     secrets: inherit
 
@@ -91,6 +105,7 @@ jobs:
 
   rust-ci:
     name: rust-ci
+    needs: ci-policy
     uses: ./.github/workflows/rust-ci.yml
     secrets: inherit
 
@@ -111,6 +126,7 @@ jobs:
     if: ${{ always() && !cancelled() }}
     needs:
       - bazel
+      - ci-policy
       - blob-size-policy
       - cargo-deny
       - codespell
