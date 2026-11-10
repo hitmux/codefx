@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Bound disposable Actions storage without touching published releases."""
+
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
 import os
 import re
 import subprocess
+from datetime import datetime, timezone
 
 REPO = "hitmux/codefx"
 LOG_PREFIXES = ("bazel-execution-logs-", "cargo-timings-", "v8-canary-")
@@ -51,9 +52,7 @@ def stale_artifact(item: dict, now: datetime) -> bool:
     name = item.get("name", "")
     created = item.get("created_at")
     return bool(
-        created and
-        name.startswith(LOG_PREFIXES) and
-        age_days(created, now) >= 10
+        created and name.startswith(LOG_PREFIXES) and age_days(created, now) >= 10
     )
 
 
@@ -65,11 +64,13 @@ def main() -> None:
     if not 1 <= args.max_delete <= 500:
         parser.error("--max-delete must be 1..500")
     if args.apply and (
-        os.getenv("GITHUB_ACTIONS") != "true" or
-        os.getenv("GITHUB_REPOSITORY") != REPO or
-        os.getenv("GITHUB_EVENT_NAME") not in {"schedule", "workflow_dispatch"}
+        os.getenv("GITHUB_ACTIONS") != "true"
+        or os.getenv("GITHUB_REPOSITORY") != REPO
+        or os.getenv("GITHUB_EVENT_NAME") not in {"schedule", "workflow_dispatch"}
     ):
-        parser.error("Destructive mode is only allowed in the scheduled/manual repository workflow")
+        parser.error(
+            "Destructive mode is only allowed in the scheduled/manual repository workflow"
+        )
 
     now = datetime.now(timezone.utc)
     candidates = []
@@ -82,7 +83,11 @@ def main() -> None:
             if stale_artifact(obj, now):
                 candidates.append(("artifact", obj))
 
-    candidates.sort(key=lambda item: item[1].get("last_accessed_at") or item[1].get("created_at") or "")
+    candidates.sort(
+        key=lambda item: item[1].get("last_accessed_at")
+        or item[1].get("created_at")
+        or ""
+    )
     eligible = candidates[:args.max_delete]
     total_bytes = 0
     for kind, obj in eligible:
@@ -90,7 +95,10 @@ def main() -> None:
         name = obj.get("name") or obj.get("key", "")
         size = obj.get("size_in_bytes", 0)
         total_bytes += size
-        print(f"{'DELETE' if args.apply else 'DRY-RUN'} {kind}: {ident} {size / 1024**2:.1f} MiB {name}")
+        print(
+            f"{'DELETE' if args.apply else 'DRY-RUN'} {kind}: "
+            f"{ident} {size / 1024**2:.1f} MiB {name}"
+        )
         if args.apply:
             endpoint = "actions/caches" if kind == "cache" else "actions/artifacts"
             subprocess.run(

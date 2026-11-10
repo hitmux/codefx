@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Bound disposable Bazel CAS snapshots before uploading them to Actions cache."""
+
 import argparse
 import os
 from pathlib import Path
@@ -18,7 +19,9 @@ def bound_cache(root: Path, max_bytes: int) -> tuple[int, int]:
                 stat = path.stat()
             except FileNotFoundError:
                 continue
-            entries.append((max(stat.st_atime_ns, stat.st_mtime_ns), str(path), stat.st_size))
+            entries.append(
+                (max(stat.st_atime_ns, stat.st_mtime_ns), str(path), stat.st_size)
+            )
     total = sum(size for _, _, size in entries)
     removed = 0
     for _, name, size in sorted(entries):
@@ -41,4 +44,6 @@ if __name__ == "__main__":
     if args.max_gib < 1:
         parser.error("--max-gib must be positive")
     removed, retained = bound_cache(args.path, args.max_gib * 1024 ** 3)
-    print(f"Bazel cache: removed {removed} files; retained {retained / (1024 ** 3):.2f} GiB")
+    print(
+        f"Bazel cache: removed {removed} files; retained {retained / (1024**3):.2f} GiB"
+    )
