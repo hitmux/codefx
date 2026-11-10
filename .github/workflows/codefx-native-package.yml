@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           case "$TARGET" in
-            x86_64-unknown-linux-musl|aarch64-unknown-linux-musl|x86_64-pc-windows-msvc|aarch64-pc-windows-msvc) ;;
+            x86_64-unknown-linux-musl|aarch64-unknown-linux-musl) ;;
             *) echo "Unsupported Codefx release target: $TARGET" >&2; exit 1 ;;
           esac
           cp scripts/install/release_package.py "$RUNNER_TEMP/codefx-release-package.py"
@@ -102,10 +102,6 @@ jobs:
         if: steps.prepare.outputs.reuse != 'true'
         with:
           target: ${{ inputs.target }}
-      - uses: ./.github/actions/setup-msvc-env
-        if: runner.os == 'Windows' && steps.prepare.outputs.reuse != 'true'
-        with:
-          target: ${{ inputs.target }}
       - name: Build native binaries
         if: steps.prepare.outputs.reuse != 'true'
         working-directory: codex-rs
@@ -116,9 +112,6 @@ jobs:
             cargo build --locked --release --target "$TARGET" --bin bwrap
             strip --strip-debug --strip-unneeded "target/$TARGET/release/bwrap"
             export CODEX_BWRAP_SHA256="$(sha256sum "target/$TARGET/release/bwrap" | cut -d ' ' -f 1)"
-          elif [[ "$TARGET" == *windows* ]]; then
-            export LIBSQLITE3_FLAGS=SQLITE_DISABLE_INTRINSIC
-            bins+=(--bin codex-command-runner --bin codex-windows-sandbox-setup)
           fi
           export STABLE_GIT_COMMIT="$(git rev-parse HEAD)"
           cargo build --locked --release --target "$TARGET" "${bins[@]}"

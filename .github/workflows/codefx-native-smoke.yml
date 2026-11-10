@@ -27,8 +27,7 @@ jobs:
           import json, os, re, subprocess
           tag = os.environ['RELEASE_TAG']
           assert re.fullmatch(r'rust-v[0-9]+\.[0-9]+\.[0-9]+', tag)
-          pairs = [('ubuntu-24.04','x86_64-unknown-linux-musl'), ('ubuntu-24.04-arm','aarch64-unknown-linux-musl'),
-                   ('windows-2025','x86_64-pc-windows-msvc'), ('windows-11-arm','aarch64-pc-windows-msvc')]
+          pairs = [('ubuntu-24.04','x86_64-unknown-linux-musl'), ('ubuntu-24.04-arm','aarch64-unknown-linux-musl')]
           requested = os.environ['REQUESTED_TARGETS']
           if requested == 'available':
               release = json.loads(subprocess.check_output(['gh','api',f'repos/hitmux/codefx/releases/tags/{tag}']))
@@ -59,7 +58,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with: { persist-credentials: false }
       - name: Install published package through the public bootstrap
-        if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
@@ -89,7 +87,3 @@ jobs:
           daemon_version="$(sed -n 's/.*"appServerVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$HOME/daemon-after.json")"
           [[ "$daemon_version" == "$version" ]]
           test ! -d "$CODEX_HOME/packages/standalone/.transaction"
-      - name: Install published package through the Windows bootstrap as a standard user
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./.github/scripts/codefx-windows-standard-user.ps1 -Mode smoke -Engine pwsh
