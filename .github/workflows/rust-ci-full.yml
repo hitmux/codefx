@@ -122,7 +122,7 @@ jobs:
         working-directory: codex-rs
     env:
       # Reuse Linux Cargo compilation with sccache.
-      USE_SCCACHE: 'true'
+      USE_SCCACHE: "true"
       CARGO_INCREMENTAL: "0"
       SCCACHE_CACHE_SIZE: 1G
 

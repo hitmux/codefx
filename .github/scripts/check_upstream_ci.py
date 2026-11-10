@@ -128,12 +128,12 @@ require(
     "Release gate must require exactly two Linux packages",
 )
 
-if ISSUES:
-    for message in ISSUES:
-        print(f"CI POLICY ERROR: {message}", file=sys.stderr)
-    raise SystemExit(1)
 require(
     os.access(ROOT / ".github/scripts/run-bazel-ci.sh", os.X_OK),
     "Bazel runner script must retain its executable bit in Git",
 )
+if ISSUES:
+    for message in ISSUES:
+        print(f"CI POLICY ERROR: {message}", file=sys.stderr)
+    raise SystemExit(1)
 print(f"Codefx upstream CI policy passed ({len(ACTIVE)} active workflows checked)")
