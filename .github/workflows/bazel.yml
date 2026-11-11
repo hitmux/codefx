@@ -122,6 +122,7 @@ jobs:
             --skip_incompatible_explicit_targets
             --test_tag_filters=-argument-comment-lint
             --test_verbose_timeout_warnings
+            --test_env=RUST_TEST_THREADS=4
             --build_metadata=COMMIT_SHA=${GITHUB_SHA}
             --build_metadata=TAG_linux_test_shard=${BAZEL_TEST_SHARD}
           )
@@ -180,7 +181,7 @@ jobs:
       # Save the job-scoped Bazel repository cache after cache misses. Keep the
       # upload non-fatal so cache service issues never fail the job itself.
       - name: Save bazel repository cache
-        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
+        if: always() && !cancelled() && matrix.target == 'x86_64-unknown-linux-gnu' && matrix.shard == 1 && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
@@ -195,7 +196,7 @@ jobs:
     # Reuse Linux Bazel test outputs before running lint.
     # The always() guard keeps diagnostics available after failed tests.
     needs: test
-    if: ${{ always() && !cancelled() }}
+    if: ${{ needs.test.result == 'success' }}
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -238,6 +239,7 @@ jobs:
         run: |
           bazel_clippy_args=(
             --config=clippy
+            --jobs=3
             --build_metadata=COMMIT_SHA=${GITHUB_SHA}
             --build_metadata=TAG_job=clippy
           )
@@ -289,15 +291,7 @@ jobs:
         shell: bash
         run: python3 .github/scripts/bound_bazel_action_cache.py "${RUNNER_TEMP}/codefx-bazel-actions" --max-gib 2
 
-      # Save the job-scoped Bazel repository cache after cache misses. Keep the
-      # upload non-fatal so cache service issues never fail the job itself.
-      - name: Save bazel repository cache
-        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-        with:
-          path: ${{ steps.prepare_bazel.outputs.repository-cache-path }}
-          key: ${{ steps.prepare_bazel.outputs.repository-cache-key }}
+      # The GNU test shard publishes the shared repository cache.
 
       - name: Check for a clean worktree
         if: always() && !cancelled()
@@ -306,7 +300,7 @@ jobs:
   verify-release-build:
     # Verify release-only cfg after the Linux Clippy build.
     needs: clippy
-    if: ${{ always() && !cancelled() }}
+    if: ${{ needs.clippy.result == 'success' }}
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -364,6 +358,7 @@ jobs:
 
           bazel_build_args=(
             --compilation_mode=fastbuild
+            --jobs=3
             --@rules_rust//rust/settings:extra_rustc_flag=-Cdebug-assertions=no
             --@rules_rust//rust/settings:extra_exec_rustc_flag=-Cdebug-assertions=no
             --build_metadata=COMMIT_SHA=${GITHUB_SHA}
@@ -416,15 +411,7 @@ jobs:
         shell: bash
         run: python3 .github/scripts/bound_bazel_action_cache.py "${RUNNER_TEMP}/codefx-bazel-actions" --max-gib 2
 
-      # Save the job-scoped Bazel repository cache after cache misses. Keep the
-      # upload non-fatal so cache service issues never fail the job itself.
-      - name: Save bazel repository cache
-        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-        with:
-          path: ${{ steps.prepare_bazel.outputs.repository-cache-path }}
-          key: ${{ steps.prepare_bazel.outputs.repository-cache-key }}
+      # The GNU test shard publishes the shared repository cache.
 
       - name: Check for a clean worktree
         if: always() && !cancelled()

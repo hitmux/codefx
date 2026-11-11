@@ -798,6 +798,10 @@ async fn managed_proxy_mode_routes_through_bridge_and_blocks_direct_egress() {
     let sandbox_helper_dir = std::path::Path::new(env!("CARGO_BIN_EXE_codex-linux-sandbox"))
         .parent()
         .expect("sandbox helper should have a parent");
+    // Nested bubblewrap must traverse the Bazel symlink's physical target.
+    let resolved_sandbox_helper_dir = sandbox_helper_dir
+        .canonicalize()
+        .expect("sandbox helper path should resolve");
     let file_system_sandbox_policy =
         FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
             path: FileSystemPath::Special {
@@ -810,7 +814,11 @@ async fn managed_proxy_mode_routes_through_bridge_and_blocks_direct_egress() {
             std::env::current_dir()
                 .expect("current directory should exist")
                 .as_path(),
-            &[AbsolutePathBuf::try_from(sandbox_helper_dir).expect("absolute helper dir")],
+            &[
+                AbsolutePathBuf::try_from(sandbox_helper_dir).expect("absolute helper dir"),
+                AbsolutePathBuf::try_from(resolved_sandbox_helper_dir.as_path())
+                    .expect("absolute resolved helper dir"),
+            ],
         );
     let permission_profile = PermissionProfile::from_runtime_permissions(
         &file_system_sandbox_policy,

@@ -58,9 +58,12 @@ def rust_formatter_group(*, check: bool) -> FormatterGroup:
     rust_files = sorted(
         os.path.relpath(REPO_ROOT / os.fsdecode(encoded_path), rust_workspace)
         for encoded_path in repository_files
-        if encoded_path and (REPO_ROOT / os.fsdecode(encoded_path)).is_file()
+        if encoded_path
+        and not os.fsdecode(encoded_path).startswith("vendor/")
+        and (REPO_ROOT / os.fsdecode(encoded_path)).is_file()
     )
     # Git supplies every source file, including files Cargo cannot discover.
+    # Third-party vendor files retain upstream formatting.
     # Do not recursively format child modules again or include ignored files.
     args = [
         "rustfmt",
