@@ -33,13 +33,18 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        for unused_path in /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; do
+        for unused_path in /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/dotnet /usr/local/share/powershell /opt/hostedtoolcache/Ruby; do
           if [[ -d "$unused_path" ]]; then
             echo "Removing unused hosted-runner SDK: $unused_path"
             sudo rm -rf -- "$unused_path"
           fi
         done
         sudo apt-get clean
+        # Remove only preloaded Docker images unused by this clean runner.
+        # Rust/Bazel tests can pull any required image when executed.
+        if command -v docker >/dev/null 2>&1; then
+          docker image prune --all --force || true
+        fi
         df -h "$GITHUB_WORKSPACE"
 
     - id: setup_ci
