@@ -215,12 +215,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          packages=(build-essential)
-          if [[ "${TARGET}" == *-musl ]]; then
+          # Hosted-runner package mirrors sometimes have transient DNS failures.
+          # Skip apt when the required build tools are already installed.
+          packages=()
+          if ! dpkg-query -W -f='${Status}' build-essential 2>/dev/null | grep -qx 'install ok installed'; then
+            packages+=(build-essential)
+          fi
+          if [[ "${TARGET}" == *-musl ]] && ! command -v musl-gcc >/dev/null 2>&1; then
             packages+=(musl-tools)
           fi
-          sudo apt-get update -y
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
+          if (( ${#packages[@]} > 0 )); then
+            for attempt in 1 2 3 4; do
+              if sudo apt-get update -y -o APT::Update::Error-Mode=any -o Acquire::Retries=2 \
+                 && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Acquire::Retries=2 --no-install-recommends "${packages[@]}"; then
+                break
+              fi
+              if (( attempt == 4 )); then
+                echo "Unable to install native Cargo dependencies after 4 attempts" >&2
+                exit 1
+              fi
+              sleep "$((attempt * 10))"
+            done
+          fi
           if [[ "${TARGET}" == *-musl ]]; then
             # Use musl only for target links; Cargo build scripts still link on the glibc host.
             linker_var="CARGO_TARGET_${TARGET^^}_LINKER"

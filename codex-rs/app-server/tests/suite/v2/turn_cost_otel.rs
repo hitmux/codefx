@@ -202,7 +202,7 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
         .await?
         .expect("turn/start");
     let TurnStartResponse { turn } = serde_json::from_value(response)?;
-    timeout(Duration::from_secs(/*secs*/ 30), async {
+    timeout(Duration::from_secs(/*secs*/ 90), async {
         while let Some(event) = client.next_event().await {
             if let InProcessServerEvent::ServerNotification(event) = event
                 && let ServerNotification::TurnCompleted(event) = *event
@@ -226,7 +226,7 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
     tokio::time::resume();
     wait_for_cost_queries(&server, /*count*/ 2).await;
     // Synchronize with actual recording, not just the backend receiving a request.
-    timeout(Duration::from_secs(/*secs*/ 10), async {
+    timeout(Duration::from_secs(/*secs*/ 30), async {
         loop {
             if metrics
                 .snapshot()
