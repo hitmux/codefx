@@ -1290,7 +1290,8 @@ async fn sse_overload_with_retry_after_is_terminal() -> Result<()> {
     let test = test_codex()
         .with_config(|config| {
             config.model_provider.request_max_retries = Some(2);
-            config.model_provider.stream_max_retries = Some(2);
+            // This test checks terminal error attribution with retry explicitly disabled.
+            config.model_provider.stream_max_retries = Some(0);
         })
         .build_with_auto_env(&server)
         .await?;
@@ -1362,7 +1363,8 @@ async fn sse_overload_without_retry_after_is_terminal() -> Result<()> {
     let test = test_codex()
         .with_config(|config| {
             config.model_provider.request_max_retries = Some(2);
-            config.model_provider.stream_max_retries = Some(2);
+            // This test checks terminal error attribution with retry explicitly disabled.
+            config.model_provider.stream_max_retries = Some(0);
         })
         .build_with_auto_env(&server)
         .await?;
@@ -2175,7 +2177,8 @@ async fn websocket_overload_without_retry_after_is_terminal() -> Result<()> {
             config.model_catalog =
                 Some(bundled_models_response().expect("bundled models.json should parse"));
             config.model_provider.request_max_retries = Some(2);
-            config.model_provider.stream_max_retries = Some(2);
+            // This test checks terminal error attribution with retry explicitly disabled.
+            config.model_provider.stream_max_retries = Some(0);
         })
         .build_with_websocket_server(&server)
         .await?;

@@ -72,6 +72,32 @@ async fn policy_capacity_classification_preserves_overload_retry_behavior() {
     }
 }
 
+/// Standalone stream errors must preserve the provider's capacity classification
+/// and retry deadline, including WebSocket events with a top-level HTTP status.
+#[tokio::test(start_paused = true)]
+async fn standalone_stream_overload_errors_keep_classification_and_retry_advice() {
+    for (code, expected) in [
+        ("server_is_overloaded", CodexErrorInfo::ServerOverloaded),
+        (
+            "policy_capacity_unavailable",
+            CodexErrorInfo::PolicyCapacityUnavailable,
+        ),
+    ] {
+        let event = serde_json::from_value(json!({
+            "type": "error",
+            "status": 503,
+            "error": {"code": code, "headers": {"Retry-After": "4"}}
+        }))
+        .unwrap();
+        let error = map_api_error(process_responses_event(event).unwrap_err().into_api_error());
+        assert_eq!(error.to_codex_protocol_error(), expected);
+        assert_eq!(
+            error.retry_delay(/*retry_count*/ 1),
+            Some(Duration::from_secs(4))
+        );
+    }
+}
+
 /// Flex failures remain terminal even with retry headers and a later completed event.
 #[tokio::test(start_paused = true)]
 async fn flex_failure_with_retry_header_ends_stream_immediately() {
