@@ -156,6 +156,8 @@ jobs:
     name: Argument comment lint - ${{ matrix.name }}
     runs-on: ${{ matrix.runs_on || matrix.runner }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
+    env:
+      BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
     needs: changed
     environment:
       name: bazel
@@ -183,12 +185,18 @@ jobs:
 
           echo "No argument-comment-lint relevant changes."
           echo "run=false" >> "$GITHUB_OUTPUT"
+      - name: Skip argument comment lint without BuildBuddy credentials
+        if: ${{ steps.argument_comment_lint_gate.outputs.run == 'true' && env.BUILDBUDDY_API_KEY == '' }}
+        run: |
+          echo "BUILDBUDDY_API_KEY is unavailable; skipping the fork-only cold Bazel lint."
+          echo "Protected Linux runs with BuildBuddy credentials execute the official Bazel lint action."
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: ${{ steps.argument_comment_lint_gate.outputs.run == 'true' }}
         with:
           persist-credentials: false
       - name: Run argument comment lint on codex-rs via Bazel
-        if: ${{ steps.argument_comment_lint_gate.outputs.run == 'true' }}
+        if: ${{ steps.argument_comment_lint_gate.outputs.run == 'true' && env.BUILDBUDDY_API_KEY != '' }}
         uses: ./.github/actions/run-argument-comment-lint
         with:
           target: ${{ runner.os }}
