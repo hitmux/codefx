@@ -97,19 +97,12 @@ jobs:
         with:
           tool: cargo-shear@1.11.2
       - name: cargo shear
-        shell: bash
-        run: |
-          set -euo pipefail
-          # cargo-shear may refresh Cargo.lock while it asks Cargo for metadata.
-          # Run it in an isolated copy so the fast gate remains read-only.
-          shear_dir="$RUNNER_TEMP/codex-rs-cargo-shear"
-          rm -rf "$shear_dir"
-          mkdir -p "$shear_dir"
-          cp -a . "$shear_dir/"
-          cd "$shear_dir"
-          cargo shear --deny-warnings
+        run: cargo shear --deny-warnings
 
-      # Keep this guard for future cargo tooling that may touch the checkout.
+      # cargo-shear asks Cargo for fresh metadata and may rewrite the lockfile
+      # with the runner's Cargo version even when the dependency audit passes.
+      # The lockfile is an input to this check, so discard that incidental
+      # rewrite before the shared clean-worktree guard runs.
       - name: Restore Cargo.lock after cargo shear
         if: always()
         run: git checkout -- Cargo.lock
