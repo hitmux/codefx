@@ -75,14 +75,8 @@ jobs:
       - name: Verify Linux-only workflows, references, cache strategy and release gate
         run: python3 .github/scripts/check_upstream_ci.py
 
-  # Keep reusable workflow calls alphabetized. The `required` job below is the
+  # Keep reusable workflow calls alphabetized. The required job below is the
   # version-controlled list that the main-branch ruleset should require.
-  bazel:
-    name: Bazel
-    needs: ci-policy
-    uses: ./.github/workflows/bazel.yml
-    secrets: inherit
-
   blob-size-policy:
     name: Blob size policy
     uses: ./.github/workflows/blob-size-policy.yml
@@ -109,14 +103,19 @@ jobs:
     uses: ./.github/workflows/rust-ci.yml
     secrets: inherit
 
-  sdk:
-    name: sdk
-    # SDK Bazel targets overlap with the main GNU Bazel graph. Start this
-    # suite after that graph so the shared action cache can be reused while
-    # still running the SDK tests when the Bazel suite fails.
-    needs: bazel
-    if: ${{ always() && !cancelled() }}
-    uses: ./.github/workflows/sdk.yml
+  codefx-install:
+    name: Codefx installer safety
+    needs: ci-policy
+    uses: ./.github/workflows/codefx-install.yml
+    secrets: inherit
+
+  codefx-native-smoke:
+    name: Codefx native Linux smoke
+    needs: ci-policy
+    uses: ./.github/workflows/codefx-native-smoke.yml
+    with:
+      tag: rust-v0.164.0
+      targets: all
     secrets: inherit
 
   required:
@@ -125,14 +124,14 @@ jobs:
     # required check can appear successful instead of reporting the failure.
     if: ${{ always() && !cancelled() }}
     needs:
-      - bazel
       - ci-policy
       - blob-size-policy
       - cargo-deny
       - codespell
       - repo-checks
       - rust-ci
-      - sdk
+      - codefx-install
+      - codefx-native-smoke
     runs-on: ubuntu-24.04
     steps:
       # Keep the helper on the same combined revision as the child workflows so
