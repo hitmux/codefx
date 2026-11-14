@@ -53,6 +53,35 @@ class LinuxProjection(unittest.TestCase):
         self.assertNotIn("build-windows-source", projected)
         self.assertNotIn("target: aarch64-apple-darwin", projected)
 
+    def test_nextest_archive_prepares_verified_v8_inputs(self):
+        path = ".github/workflows/rust-ci-full-nextest-platform.yml"
+        official = (
+            "jobs:\n  archive:\n    steps:\n"
+            "      - uses: ./.github/actions/setup-ci\n"
+            "      - name: Compute lockfile hash\n"
+            "        run: sha256sum Cargo.lock\n"
+            "      - run: cargo nextest archive --workspace\n"
+        )
+        projected = policy.linux_projection(path, official)
+        self.assertIn(policy.V8_ARCHIVE_STEP, projected)
+        self.assertIn("run: cargo nextest archive --workspace", projected)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "fork"
+            upstream = Path(temp) / "upstream"
+            for directory in (root, upstream):
+                (directory / path).parent.mkdir(parents=True)
+            (upstream / path).write_text(official)
+            (root / path).write_text(projected)
+            self.assertEqual(policy.baseline_errors(root, upstream, [path]), [])
+            for mutation in (
+                projected.replace(policy.V8_ARCHIVE_STEP, ""),
+                projected.replace("if: runner.os == 'Linux'\n", "if: false\n"),
+                projected.replace("target: ${{ inputs.target }}", "target: wrong"),
+            ):
+                with self.subTest(mutation=mutation):
+                    (root / path).write_text(mutation)
+                    self.assertTrue(policy.baseline_errors(root, upstream, [path]))
+
     def test_missing_command_and_new_skip_condition_are_drift(self):
         path = ".github/workflows/rust-ci.yml"
         official = (

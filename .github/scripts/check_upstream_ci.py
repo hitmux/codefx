@@ -26,6 +26,12 @@ VOICE_SDK_STEP = """      - name: Prepare pinned GNU voice SDK
         if: runner.os == 'Linux' && endsWith(matrix.target, '-linux-gnu')
         uses: ./.github/actions/codefx-linux-voice-sdk
 """
+V8_ARCHIVE_STEP = """      - name: Configure rusty_v8 artifact overrides and verify checksums
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: ${{ inputs.target }}
+"""
 
 
 def linux_projection(path: str, text: str) -> str:
@@ -83,6 +89,11 @@ def linux_projection(path: str, text: str) -> str:
             "      - uses: ./.github/actions/setup-ci\n",
             "      - uses: ./.github/actions/setup-ci\n"
             + VOICE_SDK_STEP.replace("matrix.target", "inputs.target"),
+        )
+        text = text.replace(
+            "      - name: Compute lockfile hash\n",
+            V8_ARCHIVE_STEP + "      - name: Compute lockfile hash\n",
+            1,
         )
     if name == "cargo-deny.yml":
         text = text.replace(

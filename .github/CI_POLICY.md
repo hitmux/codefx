@@ -30,6 +30,10 @@ The only permitted adaptations in `check_upstream_ci.py` are:
 - Prepare the existing pinned native voice SDK for GNU Cargo lint, nextest
   archive and test jobs. Hosted Ubuntu lacks the GStreamer 1.28 development
   inputs used by voice-host; keep version probes and the voice checks intact.
+- Prepare the existing checksum-verified Codex V8 archive and binding for Linux
+  nextest archive builds. The pinned fork's sandbox artifacts are published by
+  Codex, so the default Deno download URL returns 404. Retain the original
+  nextest archive command and all test targets.
 
 The V8 canary retains native GNU and musl Cargo smoke, target selection and
 ignored-test execution from upstream. Its Windows source build is removed.
