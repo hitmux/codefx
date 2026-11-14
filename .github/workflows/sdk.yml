@@ -35,9 +35,7 @@ jobs:
 
   sdks:
     runs-on: ubuntu-24.04
-    # Fork PRs have a cold Bazel repository cache; allow the official Linux
-    # build graph to finish before the job-level timeout.
-    timeout-minutes: 45
+    timeout-minutes: 180
     environment:
       name: bazel
       deployment: false

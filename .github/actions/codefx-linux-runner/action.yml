@@ -1,0 +1,23 @@
+name: Codefx Linux runner
+description: Adapt hosted Linux runner resources without changing upstream checks.
+runs:
+  using: composite
+  steps:
+    - name: Reclaim unused hosted runner tools
+      if: runner.environment == 'github-hosted'
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        df -h "$GITHUB_WORKSPACE"
+    - name: Bound local build resources
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Home bazelrc is read after the workspace bazelrc. These constraints
+        # affect local actions; authenticated remote execution stays available.
+        cat >> "$HOME/.bazelrc" <<'EOF'
+        build --local_resources=cpu=2
+        build --local_resources=memory=4096
+        EOF
+        echo 'CARGO_BUILD_JOBS=2' >> "$GITHUB_ENV"

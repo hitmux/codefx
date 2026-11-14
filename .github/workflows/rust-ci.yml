@@ -75,6 +75,9 @@ jobs:
           components: rustfmt
       - name: cargo fmt
         run: cargo fmt -- --config imports_granularity=Item --check
+      - name: Rust benchmark smoke test
+        run: just bench-smoke
+
       - name: Check for a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
@@ -93,6 +96,12 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: cargo-shear@1.11.2
+      - name: cargo shear
+        run: cargo shear --deny-warnings
+
       - name: Check for a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
@@ -156,8 +165,6 @@ jobs:
     name: Argument comment lint - ${{ matrix.name }}
     runs-on: ${{ matrix.runs_on || matrix.runner }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
-    env:
-      BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
     needs: changed
     environment:
       name: bazel
@@ -168,8 +175,7 @@ jobs:
         include:
           - name: Linux
             runner: ubuntu-24.04
-            # Cold fork PRs may build the Bazel linter graph from scratch.
-            timeout_minutes: 240
+            timeout_minutes: 180
     steps:
       - name: Check whether argument comment lint should run
         id: argument_comment_lint_gate
@@ -185,18 +191,12 @@ jobs:
 
           echo "No argument-comment-lint relevant changes."
           echo "run=false" >> "$GITHUB_OUTPUT"
-      - name: Skip argument comment lint without BuildBuddy credentials
-        if: ${{ steps.argument_comment_lint_gate.outputs.run == 'true' && env.BUILDBUDDY_API_KEY == '' }}
-        run: |
-          echo "BUILDBUDDY_API_KEY is unavailable; skipping the fork-only cold Bazel lint."
-          echo "Protected Linux runs with BuildBuddy credentials execute the official Bazel lint action."
-
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: ${{ steps.argument_comment_lint_gate.outputs.run == 'true' }}
         with:
           persist-credentials: false
       - name: Run argument comment lint on codex-rs via Bazel
-        if: ${{ steps.argument_comment_lint_gate.outputs.run == 'true' && env.BUILDBUDDY_API_KEY != '' }}
+        if: ${{ steps.argument_comment_lint_gate.outputs.run == 'true' }}
         uses: ./.github/actions/run-argument-comment-lint
         with:
           target: ${{ runner.os }}

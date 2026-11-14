@@ -1,0 +1,30 @@
+{
+  "repository": "openai/codex",
+  "tag": "rust-v0.166.0",
+  "commit": "6ff1e1ca3b30fc8b914720681fcf5fe62e95f856",
+  "files": [
+    ".github/workflows/bazel.yml",
+    ".github/workflows/blob-size-policy.yml",
+    ".github/workflows/cargo-deny.yml",
+    ".github/workflows/codespell.yml",
+    ".github/workflows/postmerge-ci.yml",
+    ".github/workflows/repo-checks.yml",
+    ".github/workflows/rust-ci.yml",
+    ".github/workflows/rust-ci-full.yml",
+    ".github/workflows/rust-ci-full-nextest-platform.yml",
+    ".github/workflows/sdk.yml",
+    ".github/actions/check-clean-worktree/action.yml",
+    ".github/actions/prepare-bazel-ci/action.yml",
+    ".github/actions/run-argument-comment-lint/action.yml",
+    ".github/actions/setup-ci/action.yml",
+    ".github/actions/setup-rusty-v8/action.yml",
+    ".github/scripts/run-bazel-ci.sh",
+    ".github/scripts/run-bazel-query-ci.sh",
+    ".github/scripts/run_bazel_with_buildbuddy.py",
+    ".github/scripts/run-argument-comment-lint-bazel.sh",
+    ".github/scripts/rusty_v8_bazel.py",
+    "scripts/check-module-bazel-lock.sh",
+    "scripts/list-bazel-clippy-targets.sh",
+    "scripts/list-bazel-release-targets.sh"
+  ]
+}
