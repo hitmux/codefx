@@ -20,6 +20,19 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
 
+      # cargo-deny asks Cargo for the complete workspace graph. The pinned
+      # rusty_v8 Git source carries Chromium submodules that are several GB
+      # and are validated separately by the Bazel/V8 jobs. Resolve the same
+      # v8 release from crates.io for this policy-only graph, then restore the
+      # production manifest before the worktree check.
+      - name: Prepare cargo-deny dependency graph
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp codex-rs/Cargo.toml "$RUNNER_TEMP/cargo-deny-Cargo.toml"
+          sed -i '/^v8 = { git =/d' codex-rs/Cargo.toml
+
       - name: Run cargo-deny
         uses: EmbarkStudios/cargo-deny-action@82eb9f621fbc699dd0918f3ea06864c14cc84246 # v2
         env:
@@ -32,10 +45,17 @@ jobs:
           rust-version: 1.95.0
           manifest-path: ./codex-rs/Cargo.toml
 
+      - name: Restore Cargo.toml after cargo-deny
+        if: always() && !cancelled()
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: cp "$RUNNER_TEMP/cargo-deny-Cargo.toml" codex-rs/Cargo.toml
+
       # cargo-deny invokes Cargo metadata and can rewrite the lockfile with
       # the runner's Cargo version even when all policy checks pass.
       - name: Restore Cargo.lock after cargo-deny
-        run: git checkout -- ./codex-rs/Cargo.lock
+        if: always() && !cancelled()
+        run: git checkout -- Cargo.lock
 
       - name: Check for a clean worktree
         if: always() && !cancelled()
