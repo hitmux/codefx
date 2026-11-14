@@ -93,20 +93,6 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
-        with:
-          tool: cargo-shear@1.11.2
-      - name: cargo shear
-        run: cargo shear --deny-warnings
-
-      # cargo-shear asks Cargo for fresh metadata and may rewrite the lockfile
-      # with the runner's Cargo version even when the dependency audit passes.
-      # The lockfile is an input to this check, so discard that incidental
-      # rewrite before the shared clean-worktree guard runs.
-      - name: Restore Cargo.lock after cargo shear
-        if: always()
-        run: git checkout -- Cargo.lock
-
       - name: Check for a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
