@@ -99,6 +99,13 @@ jobs:
       - name: cargo shear
         run: cargo shear --deny-warnings
 
+      # cargo-shear asks Cargo for fresh metadata and may rewrite the lockfile
+      # with the runner's Cargo version even when the dependency audit passes.
+      # The lockfile is an input to this check, so discard that incidental
+      # rewrite before the shared clean-worktree guard runs.
+      - name: Restore Cargo.lock after cargo shear
+        run: git checkout -- Cargo.lock
+
       - name: Check for a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
