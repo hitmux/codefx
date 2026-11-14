@@ -155,6 +155,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
+      - name: Prepare pinned GNU voice SDK
+        if: runner.os == 'Linux' && endsWith(matrix.target, '-linux-gnu')
+        uses: ./.github/actions/codefx-linux-voice-sdk
       - name: Install Linux build dependencies
         if: ${{ runner.os == 'Linux' }}
         shell: bash

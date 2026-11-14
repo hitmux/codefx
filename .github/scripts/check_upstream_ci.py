@@ -22,6 +22,10 @@ RUNNER_ADAPTER = """    - name: Adapt Codefx hosted Linux resources
       uses: ./.github/actions/codefx-linux-runner
 
 """
+VOICE_SDK_STEP = """      - name: Prepare pinned GNU voice SDK
+        if: runner.os == 'Linux' && endsWith(matrix.target, '-linux-gnu')
+        uses: ./.github/actions/codefx-linux-voice-sdk
+"""
 
 
 def linux_projection(path: str, text: str) -> str:
@@ -66,6 +70,20 @@ def linux_projection(path: str, text: str) -> str:
             text,
         )
         text = text.replace("timeout-minutes: 20", "timeout-minutes: 180")
+    if name == "rust-ci-full.yml":
+        prefix, marker, suffix = text.partition("  lint_build:\n")
+        suffix = suffix.replace(
+            "      - uses: ./.github/actions/setup-ci\n",
+            "      - uses: ./.github/actions/setup-ci\n" + VOICE_SDK_STEP,
+            1,
+        )
+        text = prefix + marker + suffix
+    if name == "rust-ci-full-nextest-platform.yml":
+        text = text.replace(
+            "      - uses: ./.github/actions/setup-ci\n",
+            "      - uses: ./.github/actions/setup-ci\n"
+            + VOICE_SDK_STEP.replace("matrix.target", "inputs.target"),
+        )
     if name == "cargo-deny.yml":
         text = text.replace(
             "        with:\n          rust-version:",

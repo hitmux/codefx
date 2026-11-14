@@ -1,0 +1,50 @@
+name: Codefx Linux voice SDK
+description: Supply the repository-pinned native SDK to the official GNU Cargo checks.
+runs:
+  using: composite
+  steps:
+    - name: Install native audio prerequisites
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update -o Acquire::Retries=3
+        sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config
+    - name: Restore pinned native voice SDK
+      id: cache
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ${{ runner.temp }}/codefx-voice-sdk
+        key: codefx-voice-sdk-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('third_party/voice/**', 'MODULE.bazel', 'MODULE.bazel.lock') }}
+    - name: Prepare native SDK build tools
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: ./.github/actions/prepare-bazel-ci
+      with:
+        target: voice-sdk-${{ runner.arch }}
+        cache-scope: codefx-voice-sdk
+    - name: Build and stage the pinned SDK
+      if: steps.cache.outputs.cache-hit != 'true'
+      working-directory: ${{ github.workspace }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # The official Bazel recipe verifies pinned source archives and exports
+        # relocatable development inputs from its inspected native runtime.
+        ./.github/scripts/run-bazel-ci.sh --remote-download-toplevel -- \
+          build --platforms=//:local_linux -- //third_party/voice:native_sdk
+        sdk="$(./.github/scripts/run-bazel-ci.sh -- \
+          cquery --platforms=//:local_linux --output=files -- \
+          //third_party/voice:native_sdk | grep -E '^(/|bazel-out/)')"
+        test -d "$sdk"
+        mkdir -p "$RUNNER_TEMP/codefx-voice-sdk"
+        cp -a "$sdk/." "$RUNNER_TEMP/codefx-voice-sdk/"
+    - name: Configure Cargo development inputs and runtime libraries
+      shell: bash
+      run: |
+        set -euo pipefail
+        sdk="$RUNNER_TEMP/codefx-voice-sdk"
+        test -f "$sdk/sdk.json"
+        # Keep the SDK ahead of host packages so GNU Cargo uses the same
+        # GLib/GStreamer versions as Bazel. ALSA remains a system ABI input.
+        echo "PKG_CONFIG_PATH=$sdk/lib/pkgconfig" >> "$GITHUB_ENV"
+        echo "LD_LIBRARY_PATH=$sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+        PKG_CONFIG_PATH="$sdk/lib/pkgconfig" pkg-config --atleast-version=1.28 gstreamer-audio-1.0

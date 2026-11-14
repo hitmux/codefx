@@ -27,6 +27,9 @@ The only permitted adaptations in `check_upstream_ci.py` are:
 - Keep the cargo-deny Docker cache on the runner home volume. Its dependency
   graph and manifests are unchanged; resolution or worktree changes must fail.
 - Omit the unavailable OpenAI Fence audit hook; retain the blob-size check.
+- Prepare the existing pinned native voice SDK for GNU Cargo lint, nextest
+  archive and test jobs. Hosted Ubuntu lacks the GStreamer 1.28 development
+  inputs used by voice-host; keep version probes and the voice checks intact.
 
 The V8 canary retains native GNU and musl Cargo smoke, target selection and
 ignored-test execution from upstream. Its Windows source build is removed.

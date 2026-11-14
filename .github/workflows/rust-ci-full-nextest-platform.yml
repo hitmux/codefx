@@ -74,6 +74,9 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-ci
+      - name: Prepare pinned GNU voice SDK
+        if: runner.os == 'Linux' && endsWith(inputs.target, '-linux-gnu')
+        uses: ./.github/actions/codefx-linux-voice-sdk
 
       - name: Install Linux build dependencies
         if: ${{ runner.os == 'Linux' }}
@@ -289,6 +292,9 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-ci
+      - name: Prepare pinned GNU voice SDK
+        if: runner.os == 'Linux' && endsWith(inputs.target, '-linux-gnu')
+        uses: ./.github/actions/codefx-linux-voice-sdk
 
       - name: Install Linux build dependencies
         if: ${{ runner.os == 'Linux' }}
