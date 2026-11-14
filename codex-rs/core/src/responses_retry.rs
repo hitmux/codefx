@@ -133,8 +133,7 @@ pub(crate) async fn handle_response_stream_error(
     if retry_state.retries >= max_retries
         && !matches!(
             err.details(),
-            CodexErrorDetails::ServerOverloaded
-                | CodexErrorDetails::PolicyCapacityUnavailable
+            CodexErrorDetails::ServerOverloaded | CodexErrorDetails::PolicyCapacityUnavailable
         )
         && client_session.try_switch_fallback_transport(
             &turn_context.session_telemetry,
