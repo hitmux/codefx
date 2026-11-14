@@ -26,6 +26,11 @@ jobs:
           rust-version: 1.95.0
           manifest-path: ./codex-rs/Cargo.toml
 
+      # cargo-deny invokes Cargo metadata and can rewrite the lockfile with
+      # the runner's Cargo version even when all policy checks pass.
+      - name: Restore Cargo.lock after cargo-deny
+        run: git checkout -- ./codex-rs/Cargo.lock
+
       - name: Check for a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
