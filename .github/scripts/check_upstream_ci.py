@@ -79,7 +79,7 @@ require(
 )
 require("      - ci-policy" in blocking, "CI required job must depend on ci-policy")
 require(
-    '".github/workflows/**"' in blocking,
+    '".github/workflows/**"' in blocking or "pull_request: {}" in blocking,
     "Upstream workflow changes must trigger the merge gate",
 )
 
@@ -89,24 +89,16 @@ require(
     "Bazel GNU and musl Linux coverage must remain",
 )
 require(
-    "      max-parallel: 4" in bazel and "--jobs=4" in bazel,
-    "Bazel Linux concurrency and local compilation must stay bounded",
+    "Run upstream Linux Bazel test graph" in bazel
+    and "test" in bazel
+    and "--test_tag_filters=-argument-comment-lint" in bazel,
+    "Bazel must retain the upstream Linux test command",
 )
 require(
-    "test-windows-shard:" not in bazel and "test-windows-native-main:" not in bazel,
-    "Windows Bazel jobs reintroduced",
-)
-
-prepare = read(".github/actions/prepare-bazel-ci/action.yml")
-wrapper = read(".github/scripts/run-bazel-ci.sh")
-require("bazel-repo-linux-v2-" in prepare, "Shared Linux repository cache missing")
-require(
-    "codefx-bazel-actions-v2-" in prepare and "CODEFX_BAZEL_ACTION_CACHE" in wrapper,
-    "Test, Clippy and release must share a bounded action cache",
-)
-require(
-    "experimental_disk_cache_gc_max_size=2G" in wrapper,
-    "Bazel disk cache GC limit removed",
+    "test-windows-shard:" not in bazel
+    and "test-windows-native-main:" not in bazel
+    and "macos-" not in bazel,
+    "Unsupported Bazel platform job reintroduced",
 )
 
 platforms = read(".github/workflows/codefx-platform-release.yml")

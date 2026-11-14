@@ -1,41 +1,35 @@
 name: Bazel
 
-# Note this workflow was originally derived from:
-# https://github.com/cerisier/toolchains_llvm_bootstrapped/blob/main/.github/workflows/ci.yaml
-
+# This is the upstream Linux Bazel test workflow. Codefx keeps the two Linux
+# targets and leaves target selection, execution and failure reporting to the
+# upstream command; the fork-specific CI layer lives in codefx-install.yml.
 on:
   workflow_call:
   workflow_dispatch:
 
 concurrency:
-  # Cancel previous actions from the same PR or branch except 'main' branch.
-  # See https://docs.github.com/en/actions/using-jobs/using-concurrency and https://docs.github.com/en/actions/learn-github-actions/contexts for more info.
-  group: concurrency-group::${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}${{ github.ref_name == 'main' && format('::{0}', github.run_id) || ''}}::scheduler-v4
+  group: bazel::${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
   test:
-    # Split the complete Linux Bazel test set across isolated runners.
-    # A monolithic cold build occupied 88 GiB in Bazel's output base and
-    # exhausted the 145 GiB hosted runner during Rust test linking.
-    # Deterministic target sharding preserves every compatible test target.
-    timeout-minutes: 240
+    name: Bazel test on ${{ matrix.os }} for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
     strategy:
       fail-fast: false
-      max-parallel: 4
       matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - x86_64-unknown-linux-musl
-        shard: [1, 2, 3, 4]
-        # ARM Linux tests remain disabled due to upstream flakiness.
-    runs-on: ubuntu-24.04
-
-    name: Bazel test on ubuntu-24.04 for ${{ matrix.target }} shard ${{ matrix.shard }}/4
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
     environment:
       name: bazel
       deployment: false
-
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -46,372 +40,67 @@ jobs:
         uses: ./.github/actions/prepare-bazel-ci
         with:
           target: ${{ matrix.target }}
-          cache-scope: bazel-target
-          # The full local Linux test graph can exhaust even a 145 GB runner.
-          # Avoid duplicating thousands of Bazel outputs in the disk action cache.
-          action-cache: "false"
-
-      # Bazel's CAS validates each artifact. Rotate immutable snapshots per
-      # commit so source-only changes can publish freshly compiled actions.
-      # Only shard 1 uploads a bounded snapshot; older v1 keys remain readable.
-      - name: Restore Linux Bazel compiled actions
-        id: restore_linux_actions
-        continue-on-error: true
-        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-        with:
-          path: ${{ runner.temp }}/codefx-bazel-actions
-          key: codefx-bazel-actions-v2-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}-${{ github.sha }}
-          # Prefer a recent snapshot for the same toolchain, then fall
-          # back to older compatible snapshots across upstream syncs.
-          restore-keys: |
-            codefx-bazel-actions-v2-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}-
-            codefx-bazel-actions-v2-${{ matrix.target }}-
-            codefx-bazel-actions-v1-${{ matrix.target }}-
+          cache-scope: bazel-${{ github.job }}
 
       - name: Check rusty_v8 MODULE.bazel checksums
-        if: matrix.target == 'x86_64-unknown-linux-gnu' && matrix.shard == 1
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
         shell: bash
         run: |
           python3 .github/scripts/rusty_v8_bazel.py check-module-bazel
           just test-github-scripts
 
       - name: Check MODULE.bazel.lock is up to date
-        if: matrix.target == 'x86_64-unknown-linux-gnu' && matrix.shard == 1
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
         shell: bash
         run: ./scripts/check-module-bazel-lock.sh
 
       - name: Resolve app-server/exec-server compatibility releases
-        if: runner.os == 'Linux'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           releases="$(python3 .github/scripts/resolve_exec_server_releases.py)"
           echo "CODEX_COMPAT_RELEASES=$releases" >> "$GITHUB_ENV"
 
-      - name: bazel test shard
+      - name: Run upstream Linux Bazel test graph
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-          BAZEL_TEST_SHARD: ${{ matrix.shard }}
-          BAZEL_TEST_SHARD_COUNT: 4
-          BAZEL_ACTION_CACHE_HIT: ${{ steps.restore_linux_actions.outputs.cache-hit }}
         shell: bash
         run: |
-          set -euo pipefail
-          # Match the test set selected by Bazel's //... wildcard while
-          # excluding standalone V8, manual and separately linted tests.
-          query='tests(//...) except tests(//third_party/v8:all) except attr(tags, "manual", tests(//...)) except attr(tags, "argument-comment-lint", tests(//...))'
-          targets_file="$(mktemp)"
-          selected_file="$(mktemp)"
-          trap 'rm -f "${targets_file}" "${selected_file}"' EXIT
-          ./.github/scripts/run-bazel-query-ci.sh --output=label -- "${query}" \
-            | LC_ALL=C sort > "${targets_file}"
-          # The shared deterministic selector also supports Linux when
-          # duration weights are disabled. Each label appears on one shard.
-          python3 .github/scripts/select_windows_bazel_targets.py \
-            --shard "${BAZEL_TEST_SHARD}" \
-            --shard-count "${BAZEL_TEST_SHARD_COUNT}" \
-            --durations /dev/null \
-            < "${targets_file}" > "${selected_file}"
-          mapfile -t selected_targets < "${selected_file}"
-
-          bazel_test_args=(
-            test
-            --build_tests_only
-            --skip_incompatible_explicit_targets
-            --test_tag_filters=-argument-comment-lint
-            --test_verbose_timeout_warnings
-            --test_env=RUST_TEST_THREADS=4
-            --build_metadata=COMMIT_SHA=${GITHUB_SHA}
-            --build_metadata=TAG_linux_test_shard=${BAZEL_TEST_SHARD}
+          bazel_targets=(
+            //...
+            -//third_party/v8:all
+            -//codex-rs/v8-poc:v8-poc-unit-tests
           )
-          if [[ -z "${BUILDBUDDY_API_KEY:-}" ]]; then
-            bazel_test_args+=(--jobs=4)
-            # Immutable cache snapshots are read-only on exact hits; other
-            # shards read the shared snapshot without duplicating cache writes.
-            if [[ "${BAZEL_TEST_SHARD}" != "1" || "${BAZEL_ACTION_CACHE_HIT}" == "true" ]]; then
-              bazel_test_args+=(--noremote_upload_local_results)
-            fi
-          fi
           ./.github/scripts/run-bazel-ci.sh \
             --print-failed-action-summary \
             --print-failed-test-logs \
             -- \
-            "${bazel_test_args[@]}" \
+            test \
+            --test_tag_filters=-argument-comment-lint \
+            --test_verbose_timeout_warnings \
+            --build_metadata=COMMIT_SHA=${GITHUB_SHA} \
             -- \
-            "${selected_targets[@]}"
-
-      - name: Record disk usage after Linux Bazel tests
-        if: always() && !cancelled()
-        shell: bash
-        run: |
-          df -h "${GITHUB_WORKSPACE}"
-          for dir in "${BAZEL_OUTPUT_BASE}" "${BAZEL_REPOSITORY_CACHE}" "${RUNNER_TEMP}/codefx-bazel-actions"; do
-            if [[ -d "${dir}" ]]; then
-              du -sh "${dir}" || true
-            fi
-          done
-
-      # Prune after Bazel exits to prevent races with running compilation.
-      # Keep only a 2 GiB snapshot per Linux target (4 GiB for both targets).
-      - name: Bound Linux Bazel compiled action cache
-        if: ${{ always() && !cancelled() && matrix.shard == 1 && steps.restore_linux_actions.outputs.cache-hit != 'true' }}
-        shell: bash
-        run: python3 .github/scripts/bound_bazel_action_cache.py "${RUNNER_TEMP}/codefx-bazel-actions" --max-gib 2
-
-      - name: Save bounded Linux Bazel compiled action cache
-        if: ${{ always() && !cancelled() && matrix.shard == 1 && steps.restore_linux_actions.outputs.cache-hit != 'true' }}
-        continue-on-error: true
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-        with:
-          path: ${{ runner.temp }}/codefx-bazel-actions
-          key: codefx-bazel-actions-v2-${{ matrix.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}-${{ github.sha }}
+            "${bazel_targets[@]}"
 
       - name: Upload Bazel execution logs
         if: always() && !cancelled()
         continue-on-error: true
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: bazel-execution-logs-test-${{ matrix.target }}-shard-${{ matrix.shard }}
+          name: bazel-execution-logs-test-${{ matrix.target }}
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
           retention-days: 3
 
-      # Save the job-scoped Bazel repository cache after cache misses. Keep the
-      # upload non-fatal so cache service issues never fail the job itself.
-      - name: Save bazel repository cache
-        if: always() && !cancelled() && matrix.target == 'x86_64-unknown-linux-gnu' && matrix.shard == 1 && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
+      - name: Save Bazel repository cache
+        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.prepare_bazel.outputs.repository-cache-path }}
           key: ${{ steps.prepare_bazel.outputs.repository-cache-key }}
-
-      - name: Check for a clean worktree
-        if: always() && !cancelled()
-        uses: ./.github/actions/check-clean-worktree
-
-  clippy:
-    # Reuse Linux Bazel test outputs before running lint.
-    # The always() guard keeps diagnostics available after failed tests.
-    needs: test
-    if: ${{ needs.test.result == 'success' }}
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          # Linux x64 lint coverage.
-          - os: ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
-    runs-on: ${{ matrix.runs_on || matrix.os }}
-    name: Bazel clippy on ${{ matrix.os }} for ${{ matrix.target }}
-    environment:
-      name: bazel
-      deployment: false
-
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Prepare Bazel CI
-        id: prepare_bazel
-        uses: ./.github/actions/prepare-bazel-ci
-        with:
-          target: ${{ matrix.target }}
-          cache-scope: bazel-target
-
-      - name: Resolve app-server/exec-server compatibility releases
-        if: runner.os == 'Linux'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          releases="$(python3 .github/scripts/resolve_exec_server_releases.py)"
-          echo "CODEX_COMPAT_RELEASES=$releases" >> "$GITHUB_ENV"
-
-      - name: bazel build --config=clippy lint targets
-        env:
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        shell: bash
-        run: |
-          bazel_clippy_args=(
-            --config=clippy
-            --jobs=3
-            --build_metadata=COMMIT_SHA=${GITHUB_SHA}
-            --build_metadata=TAG_job=clippy
-          )
-          bazel_wrapper_args=()
-          bazel_target_list_args=()
-          if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            # Keep this aligned with the fast Windows Bazel test job: use
-            # Linux RBE for clippy build actions while targeting Windows
-            # gnullvm. Fork/community PRs without the BuildBuddy secret fall
-            # back inside `run-bazel-ci.sh` to the previous local Windows MSVC
-            # host-platform shape.
-            bazel_wrapper_args+=(--windows-cross-compile)
-            bazel_target_list_args+=(--windows-cross-compile)
-            if [[ -z "${BUILDBUDDY_API_KEY:-}" ]]; then
-              # The fork fallback can see incompatible explicit Windows-cross
-              # internal test binaries in the generated target list. Preserve
-              # the old local-fallback behavior there.
-              bazel_clippy_args+=(--skip_incompatible_explicit_targets)
-            fi
-          fi
-
-          bazel_target_lines="$(./scripts/list-bazel-clippy-targets.sh "${bazel_target_list_args[@]}")"
-          bazel_targets=()
-          while IFS= read -r target; do
-            bazel_targets+=("${target}")
-          done <<< "${bazel_target_lines}"
-
-          ./.github/scripts/run-bazel-ci.sh \
-            --print-failed-action-summary \
-            "${bazel_wrapper_args[@]}" \
-            -- \
-            build \
-            "${bazel_clippy_args[@]}" \
-            -- \
-            "${bazel_targets[@]}"
-
-      - name: Upload Bazel execution logs
-        if: always() && !cancelled()
-        continue-on-error: true
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: bazel-execution-logs-clippy-${{ matrix.target }}
-          path: ${{ runner.temp }}/bazel-execution-logs
-          if-no-files-found: ignore
-          retention-days: 3
-
-      - name: Bound Linux Bazel compiled cache before snapshot save
-        if: ${{ always() && !cancelled() }}
-        shell: bash
-        run: python3 .github/scripts/bound_bazel_action_cache.py "${RUNNER_TEMP}/codefx-bazel-actions" --max-gib 2
-
-      # The GNU test shard publishes the shared repository cache.
-
-      - name: Check for a clean worktree
-        if: always() && !cancelled()
-        uses: ./.github/actions/check-clean-worktree
-
-  verify-release-build:
-    # Verify release-only cfg after the Linux Clippy build.
-    needs: clippy
-    if: ${{ needs.clippy.result == 'success' }}
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
-    runs-on: ${{ matrix.runs_on || matrix.os }}
-    name: Verify release build on ${{ matrix.os }} for ${{ matrix.target }}
-    environment:
-      name: bazel
-      deployment: false
-
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Prepare Bazel CI
-        id: prepare_bazel
-        uses: ./.github/actions/prepare-bazel-ci
-        with:
-          target: ${{ matrix.target }}
-          cache-scope: bazel-target
-
-      - name: Resolve app-server/exec-server compatibility releases
-        if: runner.os == 'Linux'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          releases="$(python3 .github/scripts/resolve_exec_server_releases.py)"
-          echo "CODEX_COMPAT_RELEASES=$releases" >> "$GITHUB_ENV"
-
-      - name: bazel build verify-release-build targets
-        env:
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        shell: bash
-        run: |
-          # This job exists to compile Rust code behind
-          # `cfg(not(debug_assertions))` so PR CI catches failures that would
-          # otherwise show up only in a release build. We do not need the full
-          # optimizer and debug-info work that normally comes with a release
-          # build to get that signal, so keep Bazel in `fastbuild` and disable
-          # Rust debug assertions explicitly.
-          bazel_wrapper_args=()
-          if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            # This is build-only signal, so use the same Linux-RBE
-            # cross-compile path as the fast Windows test and clippy jobs.
-            # Fork/community PRs without the BuildBuddy secret fall back
-            # inside `run-bazel-ci.sh` to the previous local Windows MSVC
-            # host-platform shape.
-            bazel_wrapper_args+=(--windows-cross-compile)
-          fi
-
-          bazel_build_args=(
-            --compilation_mode=fastbuild
-            --jobs=3
-            --@rules_rust//rust/settings:extra_rustc_flag=-Cdebug-assertions=no
-            --@rules_rust//rust/settings:extra_exec_rustc_flag=-Cdebug-assertions=no
-            --build_metadata=COMMIT_SHA=${GITHUB_SHA}
-            --build_metadata=TAG_job=verify-release-build
-            --build_metadata=TAG_rust_debug_assertions=off
-          )
-
-          bazel_target_lines="$(bash ./scripts/list-bazel-release-targets.sh)"
-          bazel_targets=()
-          while IFS= read -r target; do
-            bazel_targets+=("${target}")
-          done <<< "${bazel_target_lines}"
-
-          ./.github/scripts/run-bazel-ci.sh \
-            "${bazel_wrapper_args[@]}" \
-            -- \
-            build \
-            "${bazel_build_args[@]}" \
-            -- \
-            "${bazel_targets[@]}"
-
-      - name: Verify Bazel builds bwrap
-        if: runner.os == 'Linux'
-        env:
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        shell: bash
-        run: |
-          ./.github/scripts/run-bazel-ci.sh \
-            --remote-download-toplevel \
-            --print-failed-action-summary \
-            -- \
-            build \
-            --build_metadata=COMMIT_SHA=${GITHUB_SHA} \
-            --build_metadata=TAG_job=verify-bwrap \
-            -- \
-            //codex-rs/bwrap:bwrap
-
-      - name: Upload Bazel execution logs
-        if: always() && !cancelled()
-        continue-on-error: true
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: bazel-execution-logs-verify-release-build-${{ matrix.target }}
-          path: ${{ runner.temp }}/bazel-execution-logs
-          if-no-files-found: ignore
-          retention-days: 3
-
-      - name: Bound Linux Bazel compiled cache before snapshot save
-        if: ${{ always() && !cancelled() }}
-        shell: bash
-        run: python3 .github/scripts/bound_bazel_action_cache.py "${RUNNER_TEMP}/codefx-bazel-actions" --max-gib 2
-
-      # The GNU test shard publishes the shared repository cache.
 
       - name: Check for a clean worktree
         if: always() && !cancelled()

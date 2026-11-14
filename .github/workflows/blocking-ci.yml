@@ -3,67 +3,18 @@ name: blocking-ci
 # This is the single entrypoint for checks that block a PR merge. It also runs
 # after pushes to main so the same check family stays grouped in the Actions UI.
 on:
-  pull_request:
-    paths:
-      - "codex-rs/**"
-      - "sdk/**"
-      - "scripts/**"
-      - "tools/**"
-      - "third_party/**"
-      - ".github/actions/**"
-      - ".github/scripts/**"
-      - ".github/workflows/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "MODULE.bazel"
-      - "MODULE.bazel.lock"
-      - ".bazelrc"
-      - "WORKSPACE*"
-      - "BUILD*"
-      - "*.bzl"
-      - "justfile"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pyproject.toml"
-      - "uv.lock"
+  pull_request: {}
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - "codex-rs/**"
-      - "sdk/**"
-      - "scripts/**"
-      - "tools/**"
-      - "third_party/**"
-      - ".github/actions/**"
-      - ".github/scripts/**"
-      - ".github/workflows/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "MODULE.bazel"
-      - "MODULE.bazel.lock"
-      - ".bazelrc"
-      - "WORKSPACE*"
-      - "BUILD*"
-      - "*.bzl"
-      - "justfile"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pyproject.toml"
-      - "uv.lock"
 
 concurrency:
-  # A newer commit supersedes every older PR run. This prevents a burst of
-  # commits from consuming a full matrix for each intermediate revision while
-  # keeping main pushes serialized for release confidence.
-  # v3 isolates this PR gate from stuck pre-fix v2 reusable-workflow jobs;
-  # those old runs may keep macOS/Windows workers alive after cancellation.
-  group: blocking-ci::${{ github.event.pull_request.number || github.ref }}::scheduler-v3
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: blocking-ci::${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
   ci-policy:
-    name: Linux CI policy / upstream-sync preflight
+    name: Linux CI policy
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -72,11 +23,20 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - name: Verify Linux-only workflows, references, cache strategy and release gate
+      - name: Verify Linux-only upstream CI wiring
         run: python3 .github/scripts/check_upstream_ci.py
 
   # Keep reusable workflow calls alphabetized. The required job below is the
   # version-controlled list that the main-branch ruleset should require.
+  bazel:
+    name: Bazel
+    needs: ci-policy
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/bazel.yml
+    secrets: inherit
+
   blob-size-policy:
     name: Blob size policy
     uses: ./.github/workflows/blob-size-policy.yml
@@ -85,22 +45,6 @@ jobs:
   cargo-deny:
     name: cargo-deny
     uses: ./.github/workflows/cargo-deny.yml
-    secrets: inherit
-
-  codespell:
-    name: Codespell
-    uses: ./.github/workflows/codespell.yml
-    secrets: inherit
-
-  repo-checks:
-    name: repo-checks
-    uses: ./.github/workflows/repo-checks.yml
-    secrets: inherit
-
-  rust-ci:
-    name: rust-ci
-    needs: ci-policy
-    uses: ./.github/workflows/rust-ci.yml
     secrets: inherit
 
   codefx-install:
@@ -118,20 +62,50 @@ jobs:
       targets: all
     secrets: inherit
 
+  codespell:
+    name: Codespell
+    uses: ./.github/workflows/codespell.yml
+    secrets: inherit
+
+  repo-checks:
+    name: repo-checks
+    uses: ./.github/workflows/repo-checks.yml
+    secrets: inherit
+
+  rust-ci:
+    name: rust-ci
+    needs: ci-policy
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/rust-ci.yml
+    secrets: inherit
+
+  sdk:
+    name: sdk
+    needs: ci-policy
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/sdk.yml
+    secrets: inherit
+
   required:
     name: CI required
     # Without `always()`, GitHub skips this job after a failed dependency and a
     # required check can appear successful instead of reporting the failure.
-    if: ${{ always() && !cancelled() }}
+    if: ${{ always() }}
     needs:
       - ci-policy
+      - bazel
       - blob-size-policy
       - cargo-deny
+      - codefx-install
+      - codefx-native-smoke
       - codespell
       - repo-checks
       - rust-ci
-      - codefx-install
-      - codefx-native-smoke
+      - sdk
     runs-on: ubuntu-24.04
     steps:
       # Keep the helper on the same combined revision as the child workflows so

@@ -46,6 +46,9 @@ jobs:
       - name: Test standalone installer
         run: python3 -m unittest discover -s scripts/install -p 'test_*.py'
 
+      - name: Test macOS signing and notarization
+        run: python3 -m unittest discover -s .github/scripts/macos-signing -p 'test_*.py'
+
       - name: Setup pnpm
         uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
         with:
@@ -65,17 +68,7 @@ jobs:
         run: python3 scripts/readme_toc.py README.md
 
       - name: Check formatting (run `just fmt` to fix)
-        shell: bash
-        run: |
-          if ! just fmt-check; then
-            # Keep the original formatter failure visible and print an
-            # actionable diff for the fork-specific CI maintenance scripts.
-            uv run --frozen --project scripts ruff format --diff \
-              .github/scripts/bound_bazel_action_cache.py \
-              .github/scripts/check_upstream_ci.py \
-              .github/scripts/ci_storage_cleanup.py || true
-            exit 1
-          fi
+        run: just fmt-check
 
       - name: Prettier (run `pnpm run format:fix` to fix)
         run: pnpm run format

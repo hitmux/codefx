@@ -82,6 +82,19 @@ ignore = [
     { id = "RUSTSEC-2025-0141", reason = "bincode is unmaintained; pulled in via syntect v5.3.0 used by codex-tui for syntax highlighting; no fixed release yet" },
     { id = "RUSTSEC-2026-0118", reason = "hickory-proto v0.25.2 is pulled in via rama-dns/rama-tcp used by codex-network-proxy; DNSSEC features are not enabled; remove when rama updates to hickory 0.26.1 or hickory-net" },
     { id = "RUSTSEC-2026-0119", reason = "hickory-proto v0.25.2 is pulled in via rama-dns/rama-tcp used by codex-network-proxy; no fixed rama release is available yet; remove when rama updates to hickory 0.26.1 or hickory-net" },
+    { id = "RUSTSEC-2026-0487", reason = "hickory-proto 0.25.2 via rama-dns/rama-tcp; temporarily accepted until the Rust/Rama upgrade brings hickory-proto >=0.26.2" },
+    { id = "RUSTSEC-2026-0489", reason = "hickory-proto 0.25.2 via rama-dns/rama-tcp; temporarily accepted until the Rust/Rama upgrade brings hickory-proto >=0.26.2" },
+    { id = "RUSTSEC-2026-0490", reason = "hickory-proto 0.25.2 via rama-dns/rama-tcp; temporarily accepted until the Rust/Rama upgrade brings hickory-proto >=0.26.2" },
+    { id = "RUSTSEC-2026-0491", reason = "hickory-proto 0.25.2 via rama-dns/rama-tcp; temporarily accepted until the Rust/Rama upgrade brings hickory-proto >=0.26.2" },
+    # DNSSEC-only advisories; DNSSEC is disabled in codex-network-proxy.
+    { id = "RUSTSEC-2026-0504", reason = "hickory-proto 0.25.2 via rama-dns/rama-tcp; DNSSEC is disabled; reassess after the Rust/Rama upgrade to Hickory >=0.26.2" },
+    { id = "RUSTSEC-2026-0505", reason = "hickory-proto 0.25.2 via rama-dns/rama-tcp; DNSSEC is disabled; reassess after the Rust/Rama upgrade to Hickory >=0.26.2" },
+    { id = "RUSTSEC-2026-0511", reason = "hickory-proto 0.25.2 via rama-dns/rama-tcp; DNSSEC is disabled; reassess after the Rust/Rama upgrade to Hickory >=0.26.2" },
+    { id = "RUSTSEC-2026-0512", reason = "hickory-proto 0.25.2 via rama-dns/rama-tcp; DNSSEC is disabled; reassess after the Rust/Rama upgrade to Hickory >=0.26.2" },
+    { id = "RUSTSEC-2026-0514", reason = "hickory-resolver 0.25.2 via rama-dns/rama-tcp; DNSSEC is disabled; reassess after the Rust/Rama upgrade to Hickory >=0.26.2" },
+    { id = "RUSTSEC-2026-0530", reason = "hickory-proto 0.25.2 via rama-dns/rama-tcp; DNSSEC is disabled; reassess after the Rust/Rama upgrade to Hickory >=0.26.2" },
+    { id = "RUSTSEC-2026-0531", reason = "hickory-proto 0.25.2 via rama-dns/rama-tcp; DNSSEC is disabled; reassess after the Rust/Rama upgrade to Hickory >=0.26.2" },
+    { id = "RUSTSEC-2026-0532", reason = "hickory-proto 0.25.2 via rama-dns/rama-tcp; DNSSEC is disabled; reassess after the Rust/Rama upgrade to Hickory >=0.26.2" },
     { id = "RUSTSEC-2026-0194", reason = "quick-xml v0.39.4 remains via plist/syntect and wayland-scanner; plist does not exercise the affected APIs and wayland-scanner parses trusted build-time XML; remove when rust-plist#191 and wayland-rs#938 are released" },
     { id = "RUSTSEC-2026-0195", reason = "quick-xml v0.39.4 remains via plist/syntect and wayland-scanner; plist does not exercise the affected APIs and wayland-scanner parses trusted build-time XML; remove when rust-plist#191 and wayland-rs#938 are released" },
     { id = "RUSTSEC-2026-0370", reason = "zvariant 4.2.0 is unmaintained; pulled in via zbus 4.4.0 by Linux TUI accessibility integration and keyring/secret-service; remove when those paths migrate off the retired standalone crates" },
@@ -95,6 +108,7 @@ ignore = [
     { id = "RUSTSEC-2026-0398", reason = "zstd 0.13.3 pulls in zstd-safe 7.2.4 with the affected seekable feature disabled. Remove when all paths use zstd-safe >=8.2.0." },
     { id = "RUSTSEC-2026-0403", reason = "zstd 0.13.3 pulls in zstd-safe 7.2.4. Codex, tonic and zip use read decoders or initialized output buffers and discard output on error. Remove when all paths use zstd-safe >=8.2.0." },
     { id = "RUSTSEC-2026-0410", reason = "zstd-safe 7.2.4 pulls in zstd-sys 2.0.16. Its allocator bug only affects wasm32, and Codex ships native binaries. Remove when the lockfile uses zstd-sys >=2.1.2." },
+    { id = "RUSTSEC-2026-0418", reason = "libz-sys 1.1.29 via curl-sys/curl in codex-http-client is Windows-only and skips the affected probe; cc is locked to 1.2.55 (<1.6.0). Remove when libz-sys >=1.1.31; reassess if used on Unix with cc >=1.6.0." },
     # Reviewed 2026-11-05; unmaintained advisory, no known exploit or fixed upstream release.
     { id = "RUSTSEC-2026-0441", reason = "pin-utils 0.1.0 is unmaintained (upstream archived 2026-10-01), pulled in through aws-smithy-http 0.62.6 via aws-config 1.8.12 in codex-aws-auth; remove this exception when AWS SDK dependencies eliminate pin-utils" },
 ]
@@ -168,6 +182,8 @@ confidence-threshold = 0.8
 exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
     # list
+    { allow = ["0BSD"], crate = "managed@0.8.0" },
+    { allow = ["0BSD"], crate = "smoltcp@0.14.0" },
     #{ allow = ["Zlib"], crate = "adler32" },
 ]
 
@@ -335,6 +351,7 @@ allow-git = [
     "https://github.com/openai-oss-forks/tokio-tungstenite",
     "https://github.com/openai-oss-forks/tungstenite-rs",
     "https://github.com/seanh-oai/rusty_v8.git",
+    "https://github.com/transact-rs/sqlx",
 ]
 
 [sources.allow-org]

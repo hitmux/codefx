@@ -317,15 +317,6 @@ if [[ -n "${BAZEL_REPOSITORY_CACHE:-}" ]]; then
   post_config_bazel_args+=("--repository_cache=${BAZEL_REPOSITORY_CACHE}")
 fi
 
-# All Linux Bazel jobs reuse the same action-cache directory and cap it to
-# 2 GiB per target to avoid duplicating huge output-base trees on the runner.
-if [[ -n "${CODEFX_BAZEL_ACTION_CACHE:-}" ]]; then
-  post_config_bazel_args+=(
-    "--disk_cache=${CODEFX_BAZEL_ACTION_CACHE}"
-    "--experimental_disk_cache_gc_max_size=2G"
-  )
-fi
-
 if [[ -n "${CODEX_BAZEL_EXECUTION_LOG_COMPACT_DIR:-}" ]]; then
   post_config_bazel_args+=(
     "--execution_log_compact_file=${CODEX_BAZEL_EXECUTION_LOG_COMPACT_DIR}/execution-log-${bazel_args[0]}-${GITHUB_JOB:-local}-$$.zst"
@@ -333,29 +324,6 @@ if [[ -n "${CODEX_BAZEL_EXECUTION_LOG_COMPACT_DIR:-}" ]]; then
 fi
 
 if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
-  # The Windows GNU test graph uses an MSVC host toolchain for helper
-  # binaries. Pass the Visual Studio terms acceptance directly to Bazel's
-  # repository environment so the windows_support module extension receives
-  # it even when the local fallback omits the ci-windows config.
-  post_config_bazel_args+=("--repo_env=BAZEL_MSVC_RUNTIME_VISUAL_STUDIO_EULA=1")
-
-  # third_party/voice/windows_native.bzl reads these values during analysis.
-  # Bazel's inherited `--action_env=NAME` form is intentionally rejected here;
-  # pass the runner's concrete values so remote and local Windows actions see
-  # the same fixed host environment.
-  system_root="${SystemRoot:-${SYSTEMROOT:-}}"
-  processor_architecture="${PROCESSOR_ARCHITECTURE:-}"
-  if [[ -z "$system_root" || -z "$processor_architecture" ]]; then
-    echo "SystemRoot and PROCESSOR_ARCHITECTURE must be set for Windows Bazel CI." >&2
-    exit 1
-  fi
-  post_config_bazel_args+=(
-    "--action_env=SystemRoot=${system_root}"
-    "--host_action_env=SystemRoot=${system_root}"
-    "--action_env=PROCESSOR_ARCHITECTURE=${processor_architecture}"
-    "--host_action_env=PROCESSOR_ARCHITECTURE=${processor_architecture}"
-  )
-
   pass_windows_build_env=1
   if [[ $windows_cross_compile -eq 1 && -n "${BUILDBUDDY_API_KEY:-}" ]]; then
     # Remote build actions execute on Linux RBE workers. Passing the Windows

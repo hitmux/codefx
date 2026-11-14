@@ -21,15 +21,13 @@ and this document whenever platform policy deliberately changes.
 
 ## Cache and concurrency
 
-- Repository archive cache: one content-addressed Linux key shared by Bazel
-  GNU, musl, ARM64, tests, Clippy and release steps.
-- Compiled Bazel action cache: separated by target/toolchain, shared between
-  test, Clippy and release; bounded to 2 GiB per target.
-- Native Cargo: share downloaded registry/git sources across Linux targets,
-  use a 1 GiB target-specific sccache rather than archiving `codex-rs/target`.
-- Linux Bazel: at most four matrix jobs at a time and four local Bazel workers
-  without BuildBuddy. Remote execution/cache may improve cold-shard reuse;
-  verify actual BuildBuddy availability before relying on it.
+- Bazel uses the upstream Linux test graph for GNU and musl. Repository
+  dependency caching remains job-scoped and non-fatal when the cache service
+  is unavailable.
+- Native Cargo reuses downloaded registry/git sources and uses sccache where
+  the upstream workflow enables it.
+- Linux-only matrices use hosted Ubuntu runners; no fork-specific test sharder
+  or target selector changes the upstream test set.
 - Cache entries are immutable. New commits publish new snapshots and restore
   older compatible ones through prefix matching. Source/toolchain differences
   are verified by Bazel's action keys.

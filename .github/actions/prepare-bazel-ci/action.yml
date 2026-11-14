@@ -7,10 +7,6 @@ inputs:
   cache-scope:
     description: Logical namespace used to keep concurrent Bazel jobs from reserving the same repository cache key.
     required: true
-  action-cache:
-    description: Enable the local Bazel disk action cache (disable for large cold CI test graphs to avoid exhausting runner disk).
-    required: false
-    default: "true"
 outputs:
   repository-cache-path:
     description: Filesystem path used for the Bazel repository cache.
@@ -25,28 +21,6 @@ outputs:
 runs:
   using: composite
   steps:
-    # GitHub-hosted Linux runners have limited free disk space. A full
-    # cold Bazel graph exhausted the filesystem and prevented cache saves.
-    # These preinstalled SDKs are unused by the Rust/Bazel CI matrix.
-    - name: Reclaim unused runner disk space (Linux)
-      if: runner.os == 'Linux'
-      shell: bash
-      run: |
-        set -euo pipefail
-        for unused_path in /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/dotnet /usr/local/share/powershell /opt/hostedtoolcache/Ruby; do
-          if [[ -d "$unused_path" ]]; then
-            echo "Removing unused hosted-runner SDK: $unused_path"
-            sudo rm -rf -- "$unused_path"
-          fi
-        done
-        sudo apt-get clean
-        # Remove only preloaded Docker images unused by this clean runner.
-        # Rust/Bazel tests can pull any required image when executed.
-        if command -v docker >/dev/null 2>&1; then
-          docker image prune --all --force || true
-        fi
-        df -h "$GITHUB_WORKSPACE"
-
     - id: setup_ci
       uses: ./.github/actions/setup-ci
 
@@ -132,37 +106,12 @@ runs:
       id: cache_bazel_repository_key
       shell: bash
       env:
-        CACHE_HASH: ${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
+        CACHE_SCOPE: ${{ inputs.cache-scope }}
+        TARGET: ${{ inputs.target }}
+        CACHE_HASH: ${{ hashFiles('MODULE.bazel', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
       run: |
-        # Bazel repository-cache artifacts are content-addressed: share them
-        # across Linux GNU/musl, ARM and all test/lint/release stages.
-        echo "repository-cache-key=bazel-repo-linux-v2-${CACHE_HASH}" >> "${GITHUB_OUTPUT}"
-        echo "repository-cache-restore-key=bazel-repo-linux-v2-" >> "${GITHUB_OUTPUT}"
-
-    # The repository cache only avoids downloading external archives. Keep the
-    # Bazel action cache separate and share it by target so test, clippy, and
-    # release verification jobs reuse compiled actions without sharing
-    # incompatible platform outputs. The action cache is content addressed by
-    # Bazel, so source changes safely invalidate individual entries.
-    - name: Configure bounded Bazel action cache
-      shell: bash
-      run: |
-        mkdir -p "${RUNNER_TEMP}/codefx-bazel-actions"
-        echo "CODEFX_BAZEL_ACTION_CACHE=${RUNNER_TEMP}/codefx-bazel-actions" >> "${GITHUB_ENV}"
-
-    - name: Cache Bazel action outputs
-      if: inputs.action-cache == 'true'
-      continue-on-error: true
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-      with:
-        path: ${{ runner.temp }}/codefx-bazel-actions
-        # CI stages get distinct immutable snapshots. Restore prefixes allow
-        # clippy and release verification to reuse the shard-1 test snapshot.
-        key: codefx-bazel-actions-v2-${{ inputs.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}-${{ github.sha }}-${{ github.job }}
-        restore-keys: |
-          codefx-bazel-actions-v2-${{ inputs.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}-${{ github.sha }}
-          codefx-bazel-actions-v2-${{ inputs.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}-
-          codefx-bazel-actions-v2-${{ inputs.target }}-
+        echo "repository-cache-key=bazel-cache-${CACHE_SCOPE}-${TARGET}-${CACHE_HASH}" >> "${GITHUB_OUTPUT}"
+        echo "repository-cache-restore-key=bazel-cache-${CACHE_SCOPE}-${TARGET}-" >> "${GITHUB_OUTPUT}"
 
     # Restore the Bazel repository cache explicitly so external dependencies
     # do not need to be re-downloaded on every CI run. Keep restore failures

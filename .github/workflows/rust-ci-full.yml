@@ -51,8 +51,8 @@ jobs:
     name: Argument comment lint package
     runs-on: ubuntu-24.04
     env:
-      CARGO_DYLINT_VERSION: 6.3.2
-      DYLINT_LINK_VERSION: 6.3.2
+      CARGO_DYLINT_VERSION: 6.1.0
+      DYLINT_LINK_VERSION: 6.1.0
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -92,7 +92,7 @@ jobs:
   argument_comment_lint_prebuilt:
     name: Argument comment lint - ${{ matrix.name }}
     runs-on: ${{ matrix.runs_on || matrix.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 30
     environment:
       name: bazel
       deployment: false
@@ -116,15 +116,15 @@ jobs:
   lint_build:
     name: Lint/Build — ${{ matrix.runner }} - ${{ matrix.target }}${{ matrix.profile == 'release' && ' (release)' || '' }}
     runs-on: ${{ matrix.runs_on || matrix.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: codex-rs
     env:
-      # Reuse Linux Cargo compilation with sccache.
+      # Reuse compiled Linux objects without archiving the target directory.
       USE_SCCACHE: "true"
       CARGO_INCREMENTAL: "0"
-      SCCACHE_CACHE_SIZE: 1G
+      SCCACHE_CACHE_SIZE: 10G
 
     strategy:
       fail-fast: false
@@ -142,18 +142,12 @@ jobs:
           - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             profile: dev
-
-          # Run representative Linux release builds because
-          # there could be release-only build errors we want to catch.
-          # Hopefully this also pre-populates the build cache to speed up
-          # releases.
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-musl
             profile: release
           - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             profile: release
-
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -208,9 +202,9 @@ jobs:
             ${{ github.workspace }}/.cargo-home/registry/index/
             ${{ github.workspace }}/.cargo-home/registry/cache/
             ${{ github.workspace }}/.cargo-home/git/db/
-          key: cargo-home-linux-v2-${{ matrix.runner }}-${{ steps.lockhash.outputs.hash }}-${{ steps.lockhash.outputs.toolchain_hash }}
+          key: cargo-home-${{ matrix.runner }}-${{ matrix.target }}-${{ matrix.profile }}-${{ steps.lockhash.outputs.hash }}-${{ steps.lockhash.outputs.toolchain_hash }}
           restore-keys: |
-            cargo-home-linux-v2-${{ matrix.runner }}-
+            cargo-home-${{ matrix.runner }}-${{ matrix.target }}-${{ matrix.profile }}-
 
       # Install and restore sccache cache
       - name: Install sccache
@@ -288,8 +282,22 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
-      # cargo clippy compiles its own dependency graph. Skip the redundant
-      # release-profile cargo-chef cook, which doubled cold compilation work.
+      - name: Install cargo-chef
+        if: ${{ matrix.profile == 'release' }}
+        uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: cargo-chef
+          version: 0.1.71
+
+      - name: Pre-warm dependency cache (cargo-chef)
+        if: ${{ matrix.profile == 'release' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RECIPE="${RUNNER_TEMP}/chef-recipe.json"
+          cargo chef prepare --recipe-path "$RECIPE"
+          cargo chef cook --recipe-path "$RECIPE" --target ${{ matrix.target }} --release
+
       - name: cargo clippy
         run: cargo clippy --target ${{ matrix.target }} --tests --profile ${{ matrix.profile }} --timings -- -D warnings
 
@@ -300,7 +308,6 @@ jobs:
           name: cargo-timings-rust-ci-clippy-${{ matrix.target }}-${{ matrix.profile }}
           path: ${{ env.CARGO_TARGET_DIR }}/**/cargo-timings/cargo-timing.html
           if-no-files-found: warn
-          retention-days: 3
 
       # Save caches explicitly; make non-fatal so cache packaging
       # never fails the overall job. Only save when key wasn't hit.
@@ -318,7 +325,7 @@ jobs:
             ${{ github.workspace }}/.cargo-home/registry/index/
             ${{ github.workspace }}/.cargo-home/registry/cache/
             ${{ github.workspace }}/.cargo-home/git/db/
-          key: cargo-home-linux-v2-${{ matrix.runner }}-${{ steps.lockhash.outputs.hash }}-${{ steps.lockhash.outputs.toolchain_hash }}
+          key: cargo-home-${{ matrix.runner }}-${{ matrix.target }}-${{ matrix.profile }}-${{ steps.lockhash.outputs.hash }}-${{ steps.lockhash.outputs.toolchain_hash }}
 
       - name: Save sccache cache (fallback)
         if: always() && !cancelled() && env.USE_SCCACHE == 'true' && env.SCCACHE_GHA_ENABLED != 'true'
