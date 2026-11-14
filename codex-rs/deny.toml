@@ -111,6 +111,13 @@ ignore = [
     { id = "RUSTSEC-2026-0418", reason = "libz-sys 1.1.29 via curl-sys/curl in codex-http-client is Windows-only and skips the affected probe; cc is locked to 1.2.55 (<1.6.0). Remove when libz-sys >=1.1.31; reassess if used on Unix with cc >=1.6.0." },
     # Reviewed 2026-11-05; unmaintained advisory, no known exploit or fixed upstream release.
     { id = "RUSTSEC-2026-0441", reason = "pin-utils 0.1.0 is unmaintained (upstream archived 2026-10-01), pulled in through aws-smithy-http 0.62.6 via aws-config 1.8.12 in codex-aws-auth; remove this exception when AWS SDK dependencies eliminate pin-utils" },
+    # Reviewed 2026-11-14; fixed releases are not yet in this Rust 1.95
+    # branch's lockfile. Remove each exception after the dependency update.
+    { id = "RUSTSEC-2026-0386", reason = "tokio 1.52.3 exposes unsound AsyncFd constructors; Codex uses the APIs through transitive workspace dependencies; remove when the lockfile uses tokio >=1.53.3 or the fixed 1.51.6 line" },
+    { id = "RUSTSEC-2026-0486", reason = "rustix 1.1.4 has an xattr zero-length-buffer initialization bug; transitive Linux filesystem paths; remove when rustix >=1.1.6 reaches the lockfile" },
+    { id = "RUSTSEC-2026-0523", reason = "quinn-proto 0.11.18 can bypass stream limits via MAX_STREAM_DATA; pulled in through codex-tcp-tunnel/h3-quinn; remove when quinn-proto >=0.11.19 is locked" },
+    { id = "RUSTSEC-2026-0524", reason = "quinn-proto 0.11.18 can panic or allocate excessively on a malicious Retry token; pulled in through codex-tcp-tunnel/h3-quinn; remove when quinn-proto >=0.11.19 is locked" },
+    { id = "RUSTSEC-2026-0538", reason = "quinn-udp 0.5.14 and 0.6.1 can spin after a truncated datagram on selected targets; retained through QUIC/WebRTC dependencies; remove when quinn-udp >=0.5.16 or >=0.6.3 is locked" },
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.
 # If this is false, then it uses a built-in git library.

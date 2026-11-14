@@ -42,4 +42,11 @@ ignore = [
     "RUSTSEC-2026-0418",
     # Reviewed 2026-11-05: unmaintained only; no known exploitable issue or fixed upstream release.
     "RUSTSEC-2026-0441", # pin-utils 0.1.0 via aws-smithy-http 0.62.6 -> aws-config 1.8.12 -> codex-aws-auth. Remove when AWS SDK dependencies drop pin-utils.
+    # Reviewed 2026-11-14; fixed releases are not yet in this Rust 1.95
+    # branch's lockfile. Remove after the corresponding dependency updates.
+    "RUSTSEC-2026-0386", # tokio 1.52.3 AsyncFd constructors; upgrade to >=1.53.3 or fixed 1.51.6 line
+    "RUSTSEC-2026-0486", # rustix 1.1.4 xattr zero-length-buffer initialization; upgrade to >=1.1.6
+    "RUSTSEC-2026-0523", # quinn-proto 0.11.18 stream-limit validation; upgrade to >=0.11.19
+    "RUSTSEC-2026-0524", # quinn-proto 0.11.18 Retry-token allocation; upgrade to >=0.11.19
+    "RUSTSEC-2026-0538", # quinn-udp 0.5.14/0.6.1 truncated-datagram loop; upgrade to >=0.5.16 or >=0.6.3
 ]
