@@ -22,6 +22,12 @@ jobs:
 
       - name: Run cargo-deny
         uses: EmbarkStudios/cargo-deny-action@82eb9f621fbc699dd0918f3ea06864c14cc84246 # v2
+        env:
+          # Docker actions otherwise place Cargo's git checkout cache in the
+          # small container overlay. rusty_v8's submodules need several GB,
+          # so keep the cache on the runner's mounted temporary volume.
+          CARGO_HOME: /github/runner_temp/cargo-home
+          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         with:
           rust-version: 1.95.0
           manifest-path: ./codex-rs/Cargo.toml
