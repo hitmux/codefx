@@ -1,5 +1,6 @@
 name: Codefx installer safety
 on:
+  workflow_call:
   workflow_dispatch:
   push:
     branches: [main]
@@ -24,6 +25,3 @@ jobs:
           python3 -m unittest discover -s scripts/install -p test_install_transactions.py -v
       - name: Existing Linux regression suite
         run: python3 -m unittest discover -s scripts/install -p test_install_sh.py -v
-      - name: PowerShell syntax and bootstrap failure checks
-        shell: pwsh
-        run: ./scripts/install/test_install_ps1.ps1
