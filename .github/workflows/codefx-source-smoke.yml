@@ -69,6 +69,9 @@ jobs:
             --archive-dir "$RUNNER_TEMP/codefx-source-dist"
       - name: Verify native package and real installation
         run: python3 scripts/install/smoke_source_package.py --target "$TARGET" --directory "$RUNNER_TEMP/codefx-source-dist"
+      - name: Remove generated Zig cache
+        if: always() && !cancelled()
+        run: rm -rf .zig-cache
       - name: Check for a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
