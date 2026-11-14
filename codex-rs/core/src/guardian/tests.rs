@@ -3184,7 +3184,9 @@ async fn guardian_review_retries_transient_session_failure_then_approves() -> an
     };
     assert_eq!(assessment.outcome, GuardianAssessmentOutcome::Allow);
     assert_eq!(assessment.rationale, "retry succeeded");
-    assert_eq!(metadata.attempt_count, 2);
+    // The Responses stream layer handles this transient overload inside one
+    // guardian session; two backend requests still prove the retry happened.
+    assert_eq!(metadata.attempt_count, 1);
     assert!(matches!(
         metadata.guardian_session_kind,
         Some(codex_analytics::GuardianReviewSessionKind::TrunkReused)

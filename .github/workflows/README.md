@@ -1,37 +1,35 @@
-# Workflow Strategy
+# Codefx Linux CI
 
-The workflows in this directory are split so that pull requests get fast, review-friendly signal while `main` still gets the full cross-platform verification pass.
+The fork uses the official CI for the corresponding Codex release, retains its
+Linux checks and adds Codefx checks. The immutable baseline and permitted runner
+adaptations are documented in [CI_POLICY.md](../CI_POLICY.md).
 
-## Pull Requests
+## Pull requests
 
-- Required checks run against GitHub's synthetic merge commit, not the pull
-  request head alone. This includes changes already on `main` and catches
-  conflicts before they reach the branch.
-- `bazel.yml` is the main pre-merge verification path for Rust code.
-  It runs Bazel `test` and Bazel `clippy` on the supported Bazel targets,
-  including the generated Rust test binaries needed to lint inline `#[cfg(test)]`
-  code.
-- `rust-ci.yml` keeps the Cargo-native PR checks intentionally small:
-  - `cargo fmt --check`
-  - `cargo shear`
-  - `argument-comment-lint` on Linux, macOS, and Windows
-  - `tools/argument-comment-lint` package tests when the lint or its workflow wiring changes
+`blocking-ci.yml` checks GitHub's synthetic merge commit. Its `CI required`
+result requires the official Bazel tests, Clippy and release build checks,
+fast Rust checks, SDK checks, dependency policy and repository checks, plus
+Codefx baseline policy, installer safety and current-source native packages.
+A job with a deleted command or a credential-dependent skip is not equivalent
+to the official check. The baseline guard verifies the retained implementations.
 
-## Post-Merge On `main`
+`codefx-source-smoke.yml` builds Linux x86_64 and ARM64 musl packages from the
+same revision and installs the actual native executables. It has no publication
+permissions and never substitutes an older published package for the candidate.
+`codefx-native-smoke.yml` separately verifies explicitly selected published tags;
+that result does not validate current source.
 
-- `bazel.yml` also runs on pushes to `main`.
-  This re-verifies the merged Bazel path and helps keep the BuildBuddy caches warm.
-- `rust-ci-full.yml` is the full Cargo-native verification workflow.
-  It keeps the heavier checks off the PR path while still validating them after merge:
-  - the full Cargo `clippy` matrix
-  - the full Cargo `nextest` matrix via per-platform archive-backed shards
-  - Windows ARM64 nextest archives cross-compiled on Windows x64, then replayed on native Windows ARM64 shards
-  - release-profile Cargo builds
-  - cross-platform `argument-comment-lint`
-  - Linux remote-env tests
+## Full Linux verification
 
-## Rule Of Thumb
+`postmerge-ci.yml` calls `rust-ci-full.yml` and `v8-canary.yml` on main.
+The full Rust workflow preserves the official Linux Cargo Clippy/release matrix,
+nextest archive/shard coverage and remote-environment tests. It also supports
+manual runs and branches containing `full-ci` for verification before merge.
+Windows/macOS jobs are removed; private Linux runners use hosted Ubuntu.
 
-- If a build/test/clippy check can be expressed in Bazel, prefer putting the PR-time version in `bazel.yml`.
-- Keep `rust-ci.yml` fast enough that it usually does not dominate PR latency.
-- Reserve `rust-ci-full.yml` for heavyweight Cargo-native coverage that Bazel does not replace yet.
+On an upstream sync, update the source version, baseline manifest, pinned
+checkout and official CI/helper files together. CI rejects unexpected drift.
+Run full Linux CI and release package validation before publication.
+
+All verification and formatting runs in GitHub Actions. Locally, edit files
+and review static Git differences only.

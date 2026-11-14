@@ -1,0 +1,82 @@
+name: Codefx current source packages
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    name: Current source — ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    env:
+      TARGET: ${{ matrix.target }}
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      AWS_LC_SYS_NO_JITTER_ENTROPY: "1"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: ${{ matrix.target }}
+      - name: Cache Cargo sources
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: codefx-source-${{ matrix.target }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.14.0
+          use-cache: false
+      - name: Prepare native musl dependencies
+        run: bash .github/scripts/install-musl-build-tools.sh
+      - uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: ${{ matrix.target }}
+      - name: Build this exact source revision
+        working-directory: codex-rs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export STABLE_GIT_COMMIT="$(git rev-parse HEAD)"
+          cargo build --locked --release --target "$TARGET" --bin bwrap
+          sandbox="$CARGO_TARGET_DIR/$TARGET/release/bwrap"
+          strip --strip-debug --strip-unneeded "$sandbox"
+          export CODEX_BWRAP_SHA256="$(sha256sum "$sandbox" | cut -d ' ' -f 1)"
+          cargo build --locked --release --target "$TARGET" \
+            --bin codex --bin codex-code-mode-host --bin codex-exec-server
+      - name: Assemble current source package
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/build-codex-package-archive.sh \
+            --target "$TARGET" --bundle primary \
+            --entrypoint-dir "$CARGO_TARGET_DIR/$TARGET/release" \
+            --archive-dir "$RUNNER_TEMP/codefx-source-dist"
+      - name: Verify native package and real installation
+        run: python3 scripts/install/smoke_source_package.py --target "$TARGET" --directory "$RUNNER_TEMP/codefx-source-dist"
+      - name: Check for a clean worktree
+        if: always() && !cancelled()
+        uses: ./.github/actions/check-clean-worktree
+      - name: Upload verified current source packages
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: codefx-source-${{ matrix.target }}
+          path: ${{ runner.temp }}/codefx-source-dist/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3

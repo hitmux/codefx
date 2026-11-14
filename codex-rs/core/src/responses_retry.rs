@@ -128,7 +128,13 @@ pub(crate) async fn handle_response_stream_error(
         return Ok(());
     }
 
+    // Capacity failures are model-specific; switching transports would only
+    // replay the same saturated request after exhausting its bounded retries.
     if retry_state.retries >= max_retries
+        && !matches!(
+            err.details(),
+            CodexErrorDetails::ServerOverloaded | CodexErrorDetails::PolicyCapacityUnavailable
+        )
         && client_session.try_switch_fallback_transport(
             &turn_context.session_telemetry,
             turn_context.model_info(),

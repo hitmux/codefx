@@ -4,7 +4,6 @@ use crate::common::ResponseStream;
 use crate::common::SafetyBuffering;
 use crate::common::SafetyBufferingTreatment;
 use crate::error::ApiError;
-use crate::error::parse_terminal_provider_error;
 use crate::guardian_assessment::parse_guardian_assessment;
 use crate::rate_limits::parse_all_rate_limits;
 use crate::safety_buffering::treatment_from_headers;
@@ -377,11 +376,11 @@ pub fn process_responses_event(
 ) -> std::result::Result<Option<ResponseEvent>, ResponsesEventError> {
     match event.kind.as_str() {
         "error" => {
-            if let Some(error) =
-                parse_terminal_provider_error(event.error.as_ref(), /*status*/ None)
-            {
-                return Err(ResponsesEventError::Api(error));
-            }
+            // Standalone error events carry the same provider error codes and
+            // Retry-After headers as response.failed events. Parse both alike.
+            return Err(ResponsesEventError::Api(parse_failed_response(Some(
+                serde_json::json!({ "error": event.error }),
+            ))));
         }
         "response.output_item.done" => {
             if let Some(item_val) = event.item {

@@ -3,69 +3,43 @@ name: blocking-ci
 # This is the single entrypoint for checks that block a PR merge. It also runs
 # after pushes to main so the same check family stays grouped in the Actions UI.
 on:
-  pull_request:
-    paths:
-      - "codex-rs/**"
-      - "sdk/**"
-      - "scripts/**"
-      - "tools/**"
-      - "third_party/**"
-      - ".github/actions/**"
-      - ".github/scripts/**"
-      - ".github/workflows/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "MODULE.bazel"
-      - "MODULE.bazel.lock"
-      - ".bazelrc"
-      - "WORKSPACE*"
-      - "BUILD*"
-      - "*.bzl"
-      - "justfile"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pyproject.toml"
-      - "uv.lock"
+  pull_request: {}
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - "codex-rs/**"
-      - "sdk/**"
-      - "scripts/**"
-      - "tools/**"
-      - "third_party/**"
-      - ".github/actions/**"
-      - ".github/scripts/**"
-      - ".github/workflows/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "MODULE.bazel"
-      - "MODULE.bazel.lock"
-      - ".bazelrc"
-      - "WORKSPACE*"
-      - "BUILD*"
-      - "*.bzl"
-      - "justfile"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pyproject.toml"
-      - "uv.lock"
 
 concurrency:
-  # A newer commit supersedes every older PR run. This prevents a burst of
-  # commits from consuming a full matrix for each intermediate revision while
-  # keeping main pushes serialized for release confidence.
-  # v3 isolates this PR gate from stuck pre-fix v2 reusable-workflow jobs;
-  # those old runs may keep macOS/Windows workers alive after cancellation.
-  group: blocking-ci::${{ github.event.pull_request.number || github.ref }}::scheduler-v3
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: blocking-ci::${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
-  # Keep reusable workflow calls alphabetized. The `required` job below is the
+  ci-policy:
+    name: Linux CI policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Check out the pinned official CI baseline
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: openai/codex
+          ref: 6ff1e1ca3b30fc8b914720681fcf5fe62e95f856 # rust-v0.166.0
+          path: .tmp/upstream-ci
+          persist-credentials: false
+      - name: Test CI coverage and baseline guard
+        run: python3 -m unittest discover -s .github/scripts -p test_upstream_ci.py -v
+      - name: Verify Linux-only upstream CI wiring
+        run: python3 .github/scripts/check_upstream_ci.py --upstream .tmp/upstream-ci
+
+  # Keep reusable workflow calls alphabetized. The required job below is the
   # version-controlled list that the main-branch ruleset should require.
   bazel:
     name: Bazel
+    needs: ci-policy
     uses: ./.github/workflows/bazel.yml
     secrets: inherit
 
@@ -79,6 +53,17 @@ jobs:
     uses: ./.github/workflows/cargo-deny.yml
     secrets: inherit
 
+  codefx-install:
+    name: Codefx installer safety
+    needs: ci-policy
+    uses: ./.github/workflows/codefx-install.yml
+    secrets: inherit
+
+  codefx-source-smoke:
+    name: Codefx current source packages
+    needs: ci-policy
+    uses: ./.github/workflows/codefx-source-smoke.yml
+
   codespell:
     name: Codespell
     uses: ./.github/workflows/codespell.yml
@@ -91,16 +76,16 @@ jobs:
 
   rust-ci:
     name: rust-ci
+    needs: ci-policy
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/rust-ci.yml
     secrets: inherit
 
   sdk:
-    name: sdk
-    # SDK Bazel targets overlap with the main GNU Bazel graph. Start this
-    # suite after that graph so the shared action cache can be reused while
-    # still running the SDK tests when the Bazel suite fails.
-    needs: bazel
-    if: ${{ always() && !cancelled() }}
+    name: SDK
+    needs: ci-policy
     uses: ./.github/workflows/sdk.yml
     secrets: inherit
 
@@ -108,11 +93,14 @@ jobs:
     name: CI required
     # Without `always()`, GitHub skips this job after a failed dependency and a
     # required check can appear successful instead of reporting the failure.
-    if: ${{ always() && !cancelled() }}
+    if: ${{ always() }}
     needs:
+      - ci-policy
       - bazel
       - blob-size-policy
       - cargo-deny
+      - codefx-install
+      - codefx-source-smoke
       - codespell
       - repo-checks
       - rust-ci

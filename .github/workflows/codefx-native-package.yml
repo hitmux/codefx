@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           case "$TARGET" in
-            x86_64-unknown-linux-musl|aarch64-unknown-linux-musl|x86_64-pc-windows-msvc|aarch64-pc-windows-msvc) ;;
+            x86_64-unknown-linux-musl|aarch64-unknown-linux-musl) ;;
             *) echo "Unsupported Codefx release target: $TARGET" >&2; exit 1 ;;
           esac
           cp scripts/install/release_package.py "$RUNNER_TEMP/codefx-release-package.py"
@@ -83,15 +83,42 @@ jobs:
         with:
           toolchain: "1.99.1"
           targets: ${{ inputs.target }}
-      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7
+      - name: Restore shared Linux Cargo sources
         if: steps.prepare.outputs.reuse != 'true'
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            codex-rs/target
-          key: codefx-native-${{ inputs.target }}-v1-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
-          restore-keys: codefx-native-${{ inputs.target }}-v1-
+          # Registry and git sources are architecture-neutral; avoid a second copy.
+          key: codefx-native-deps-linux-v2-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
+          restore-keys: |
+            codefx-native-deps-linux-v2-
+
+      - name: Install sccache
+        if: steps.prepare.outputs.reuse != 'true'
+        uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: sccache
+          version: 0.8.2
+
+      - name: Restore bounded Linux native compilation cache
+        if: steps.prepare.outputs.reuse != 'true'
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ${{ runner.temp }}/codefx-native-sccache
+          key: codefx-native-sccache-v2-${{ inputs.target }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: |
+            codefx-native-sccache-v2-${{ inputs.target }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}-
+            codefx-native-sccache-v2-${{ inputs.target }}-
+
+      - name: Enable bounded sccache
+        if: steps.prepare.outputs.reuse != 'true'
+        run: |
+          mkdir -p "${RUNNER_TEMP}/codefx-native-sccache"
+          echo "RUSTC_WRAPPER=sccache" >> "${GITHUB_ENV}"
+          echo "SCCACHE_DIR=${RUNNER_TEMP}/codefx-native-sccache" >> "${GITHUB_ENV}"
+          echo "SCCACHE_CACHE_SIZE=1G" >> "${GITHUB_ENV}"
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         if: runner.os == 'Linux' && steps.prepare.outputs.reuse != 'true'
         with: { version: 0.14.0, use-cache: false }
@@ -100,10 +127,6 @@ jobs:
         run: bash .github/scripts/install-musl-build-tools.sh
       - uses: ./.github/actions/setup-rusty-v8
         if: steps.prepare.outputs.reuse != 'true'
-        with:
-          target: ${{ inputs.target }}
-      - uses: ./.github/actions/setup-msvc-env
-        if: runner.os == 'Windows' && steps.prepare.outputs.reuse != 'true'
         with:
           target: ${{ inputs.target }}
       - name: Build native binaries
@@ -116,12 +139,14 @@ jobs:
             cargo build --locked --release --target "$TARGET" --bin bwrap
             strip --strip-debug --strip-unneeded "target/$TARGET/release/bwrap"
             export CODEX_BWRAP_SHA256="$(sha256sum "target/$TARGET/release/bwrap" | cut -d ' ' -f 1)"
-          elif [[ "$TARGET" == *windows* ]]; then
-            export LIBSQLITE3_FLAGS=SQLITE_DISABLE_INTRINSIC
-            bins+=(--bin codex-command-runner --bin codex-windows-sandbox-setup)
           fi
           export STABLE_GIT_COMMIT="$(git rev-parse HEAD)"
           cargo build --locked --release --target "$TARGET" "${bins[@]}"
+      - name: Report Linux native compiler cache efficiency
+        if: ${{ always() && !cancelled() && steps.prepare.outputs.reuse != 'true' }}
+        continue-on-error: true
+        run: sccache --show-stats
+
       - name: Assemble platform package
         if: steps.prepare.outputs.reuse != 'true'
         run: |

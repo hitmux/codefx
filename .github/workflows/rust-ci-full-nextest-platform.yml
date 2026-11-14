@@ -52,7 +52,7 @@ jobs:
   archive:
     name: Build nextest archive
     runs-on: ${{ inputs.archive_runner_group != '' && fromJSON(format('{{"group":"{0}","labels":"{1}"}}', inputs.archive_runner_group, inputs.archive_runner_labels)) || inputs.archive_runner != '' && inputs.archive_runner || inputs.runner_group != '' && fromJSON(format('{{"group":"{0}","labels":"{1}"}}', inputs.runner_group, inputs.runner_labels)) || inputs.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: codex-rs
@@ -74,6 +74,9 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-ci
+      - name: Prepare pinned GNU voice SDK
+        if: runner.os == 'Linux' && endsWith(inputs.target, '-linux-gnu')
+        uses: ./.github/actions/codefx-linux-voice-sdk
 
       - name: Install Linux build dependencies
         if: ${{ runner.os == 'Linux' }}
@@ -92,6 +95,12 @@ jobs:
       - name: Expose MSVC SDK environment (Windows)
         if: ${{ runner.os == 'Windows' && inputs.target == 'aarch64-pc-windows-msvc' }}
         uses: ./.github/actions/setup-msvc-env
+        with:
+          target: ${{ inputs.target }}
+
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/setup-rusty-v8
         with:
           target: ${{ inputs.target }}
 
@@ -269,7 +278,7 @@ jobs:
     name: Tests shard ${{ matrix.shard }}/4
     needs: archive
     runs-on: ${{ inputs.runner_group != '' && fromJSON(format('{{"group":"{0}","labels":"{1}"}}', inputs.runner_group, inputs.runner_labels)) || inputs.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: codex-rs
@@ -289,6 +298,9 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-ci
+      - name: Prepare pinned GNU voice SDK
+        if: runner.os == 'Linux' && endsWith(inputs.target, '-linux-gnu')
+        uses: ./.github/actions/codefx-linux-voice-sdk
 
       - name: Install Linux build dependencies
         if: ${{ runner.os == 'Linux' }}

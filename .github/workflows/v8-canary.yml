@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}::scheduler-v4
+  group: ${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
   cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
@@ -83,7 +83,6 @@ jobs:
       deployment: false
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         include:
           - runner: ubuntu-24.04
@@ -261,166 +260,6 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: v8-canary-${{ needs.metadata.outputs.v8_version }}-${{ matrix.variant }}-${{ matrix.target }}
-          path: dist/${{ matrix.target }}/*
-
-      - name: Check for a clean worktree
-        if: always() && !cancelled()
-        uses: ./.github/actions/check-clean-worktree
-
-  build-windows-source:
-    name: Build ptrcomp-sandbox ${{ matrix.target }} from source
-    needs: [metadata, build]
-    if: ${{ always() && !cancelled() && needs.metadata.outputs.windows_source_required == 'true' }}
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        include:
-          - runner: windows-2025
-            target: x86_64-pc-windows-msvc
-          - runner: windows-2025
-            target: aarch64-pc-windows-msvc
-
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          persist-credentials: false
-
-      - id: setup_ci
-        uses: ./.github/actions/setup-ci
-
-      - name: Configure git for upstream checkout
-        shell: bash
-        run: git config --global core.symlinks true
-
-      - name: Check out upstream rusty_v8
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          repository: denoland/rusty_v8
-          ref: v${{ needs.metadata.outputs.v8_version }}
-          path: upstream-rusty-v8
-          submodules: recursive
-          persist-credentials: false
-
-      - name: Download upstream Windows build tools
-        shell: bash
-        working-directory: upstream-rusty-v8
-        run: |
-          set -euo pipefail
-          # Upstream skips this submodule and downloads the pinned archive in CI.
-          mkdir -p tools/win
-          curl -fL https://chromium.googlesource.com/chromium/src/tools/win/+archive/faefd1b6fa9eeb033ad6fe60368ccb9bf908cbd0.tar.gz |
-            tar -xz -C tools/win
-
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
-        with:
-          python-version: "3.11"
-          architecture: x64
-
-      - name: Set up Codex Rust toolchain for Cargo smoke
-        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-        with:
-          toolchain: "1.95.0"
-          targets: ${{ matrix.target }}
-
-      - name: Install rusty_v8 Rust toolchain
-        env:
-          TARGET: ${{ matrix.target }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          rustup toolchain install 1.91.0 --profile minimal --no-self-update
-          rustup target add --toolchain 1.91.0 "${TARGET}"
-
-      - name: Write upstream submodule status
-        shell: bash
-        working-directory: upstream-rusty-v8
-        run: git submodule status --recursive > git_submodule_status.txt
-
-      - name: Restore upstream source-build cache
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
-        with:
-          path: |
-            ${{ steps.setup_ci.outputs.cargo-target-dir }}/sccache
-            ${{ steps.setup_ci.outputs.cargo-target-dir }}/${{ matrix.target }}/release/gn_out
-          key: rusty-v8-source-${{ matrix.target }}-${{ matrix.runner }}-sandbox-${{ hashFiles('upstream-rusty-v8/Cargo.lock', 'upstream-rusty-v8/build.rs', 'upstream-rusty-v8/git_submodule_status.txt', 'patches/v8_array_sort_elements_kind.patch') }}
-          restore-keys: |
-            rusty-v8-source-${{ matrix.target }}-${{ matrix.runner }}-sandbox-
-
-      - name: Apply V8 Array.sort backport
-        shell: bash
-        working-directory: upstream-rusty-v8/v8
-        run: git apply -p3 "${GITHUB_WORKSPACE}/patches/v8_array_sort_elements_kind.patch"
-
-      - name: Install sccache
-        uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
-        with:
-          tool: sccache@0.8.2
-
-      - name: Start sccache
-        shell: pwsh
-        env:
-          SCCACHE_CACHE_SIZE: 256M
-          SCCACHE_DIR: ${{ steps.setup_ci.outputs.cargo-target-dir }}/sccache
-          SCCACHE_IDLE_TIMEOUT: 0
-        run: sccache --start-server
-
-      - name: Install Chromium clang for ARM64 MSVC cross build
-        if: matrix.target == 'aarch64-pc-windows-msvc'
-        shell: bash
-        working-directory: upstream-rusty-v8
-        run: python3 tools/clang/scripts/update.py
-
-      - name: Build upstream rusty_v8 sandbox release pair
-        env:
-          SCCACHE_IDLE_TIMEOUT: 0
-          TARGET: ${{ matrix.target }}
-          V8_FROM_SOURCE: "1"
-        shell: bash
-        working-directory: upstream-rusty-v8
-        run: cargo +1.91.0 build --locked --release --target "${TARGET}" --features v8_enable_sandbox
-
-      - name: Stage upstream sandbox release pair
-        env:
-          TARGET: ${{ matrix.target }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 .github/scripts/rusty_v8_bazel.py stage-upstream-release-pair \
-            --target-dir "${CARGO_TARGET_DIR}" \
-            --target "${TARGET}" \
-            --output-dir "dist/${TARGET}" \
-            --sandbox
-
-      - name: Smoke link staged artifact with Cargo
-        env:
-          TARGET: ${{ matrix.target }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          archive="$(find "dist/${TARGET}" -maxdepth 1 -type f -name 'rusty_v8_*.lib.gz' -print -quit)"
-          binding="$(find "dist/${TARGET}" -maxdepth 1 -type f -name 'src_binding_*.rs' -print -quit)"
-          if [[ -z "${archive}" || -z "${binding}" ]]; then
-            echo "Missing staged archive or binding for ${TARGET}." >&2
-            exit 1
-          fi
-
-          (
-            cd codex-rs
-            RUSTY_V8_ARCHIVE="${GITHUB_WORKSPACE}/${archive}" \
-            RUSTY_V8_SRC_BINDING_PATH="${GITHUB_WORKSPACE}/${binding}" \
-            cargo +1.95.0 test -p codex-v8-poc --target "${TARGET}" --features sandbox --no-run
-          )
-
-      - name: Upload staged artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
-        with:
-          name: v8-canary-${{ needs.metadata.outputs.v8_version }}-ptrcomp-sandbox-${{ matrix.target }}
           path: dist/${{ matrix.target }}/*
 
       - name: Check for a clean worktree

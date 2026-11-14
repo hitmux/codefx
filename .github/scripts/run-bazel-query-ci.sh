@@ -26,13 +26,6 @@ run_bazel() {
 
 bazel_query_args=(query)
 
-if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
-  # Windows GNU lint/test target discovery still uses the MSVC host toolchain
-  # for helper binaries, so match the main CI Bazel invocation's explicit
-  # Visual Studio terms acceptance.
-  bazel_query_args+=(--repo_env=BAZEL_MSVC_RUNTIME_VISUAL_STUDIO_EULA=1)
-fi
-
 if [[ -n "${BAZEL_REPO_CONTENTS_CACHE:-}" ]]; then
   bazel_query_args+=("--repo_contents_cache=${BAZEL_REPO_CONTENTS_CACHE}")
 fi

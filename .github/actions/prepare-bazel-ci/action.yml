@@ -7,10 +7,6 @@ inputs:
   cache-scope:
     description: Logical namespace used to keep concurrent Bazel jobs from reserving the same repository cache key.
     required: true
-  action-cache:
-    description: Enable the local Bazel disk action cache (disable for large cold CI test graphs to avoid exhausting runner disk).
-    required: false
-    default: "true"
 outputs:
   repository-cache-path:
     description: Filesystem path used for the Bazel repository cache.
@@ -25,23 +21,6 @@ outputs:
 runs:
   using: composite
   steps:
-    # GitHub-hosted Linux runners have limited free disk space. A full
-    # cold Bazel graph exhausted the filesystem and prevented cache saves.
-    # These preinstalled SDKs are unused by the Rust/Bazel CI matrix.
-    - name: Reclaim unused runner disk space (Linux)
-      if: runner.os == 'Linux'
-      shell: bash
-      run: |
-        set -euo pipefail
-        for unused_path in /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; do
-          if [[ -d "$unused_path" ]]; then
-            echo "Removing unused hosted-runner SDK: $unused_path"
-            sudo rm -rf -- "$unused_path"
-          fi
-        done
-        sudo apt-get clean
-        df -h "$GITHUB_WORKSPACE"
-
     - id: setup_ci
       uses: ./.github/actions/setup-ci
 
@@ -133,20 +112,6 @@ runs:
       run: |
         echo "repository-cache-key=bazel-cache-${CACHE_SCOPE}-${TARGET}-${CACHE_HASH}" >> "${GITHUB_OUTPUT}"
         echo "repository-cache-restore-key=bazel-cache-${CACHE_SCOPE}-${TARGET}-" >> "${GITHUB_OUTPUT}"
-
-    # The repository cache only avoids downloading external archives. Keep the
-    # Bazel action cache separate and share it by target so test, clippy, and
-    # release verification jobs reuse compiled actions without sharing
-    # incompatible platform outputs. The action cache is content addressed by
-    # Bazel, so source changes safely invalidate individual entries.
-    - name: Cache Bazel action outputs
-      if: inputs.action-cache == 'true'
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-      with:
-        path: ~/.cache/bazel-disk-cache
-        key: bazel-action-${{ inputs.cache-scope }}-${{ inputs.target }}-${{ hashFiles('.bazelrc', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
-        restore-keys: |
-          bazel-action-${{ inputs.cache-scope }}-${{ inputs.target }}-
 
     # Restore the Bazel repository cache explicitly so external dependencies
     # do not need to be re-downloaded on every CI run. Keep restore failures

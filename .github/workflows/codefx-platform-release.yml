@@ -1,4 +1,4 @@
-name: Codefx Linux/Windows packages
+name: Codefx Linux packages
 on:
   workflow_call:
     inputs:
@@ -51,9 +51,7 @@ jobs:
       matrix:
         include:
           - { runner: ubuntu-24.04, target: x86_64-unknown-linux-musl }
-          - { runner: windows-2025, target: x86_64-pc-windows-msvc }
           - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
-          - { runner: windows-11-arm, target: aarch64-pc-windows-msvc }
     uses: ./.github/workflows/codefx-native-package.yml
     with:
       tag: ${{ inputs.tag }}
@@ -74,7 +72,7 @@ jobs:
           set -euo pipefail
           mkdir dist
           cd dist
-          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-pc-windows-msvc aarch64-pc-windows-msvc; do
+          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
             gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$target.sha256"
             file="codex-package-$target.tar.gz"
             digest="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.assets[] | [.name,.digest] | @tsv' | awk -F '\t' -v name="$file" '$1 == name {print $2}')"

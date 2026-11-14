@@ -56,7 +56,7 @@ impl UpdateAction {
                 "sh",
                 &[
                     "-c",
-                    "curl -fsSL https://raw.githubusercontent.com/caokai674/codefx/main/scripts/install/install-codefx.sh | CODEFX_REPLACE_OFFICIAL=1 CODEX_NON_INTERACTIVE=1 sh",
+                    "set -eu; installer=\"$(mktemp)\"; trap 'rm -f \"$installer\"' EXIT; curl -fsSL -o \"$installer\" https://raw.githubusercontent.com/caokai674/codefx/main/scripts/install/install-codefx.sh; test -s \"$installer\"; CODEFX_REPLACE_OFFICIAL=1 CODEX_NON_INTERACTIVE=1 sh \"$installer\"",
                 ],
             ),
             UpdateAction::StandaloneWindows => (
@@ -163,7 +163,7 @@ mod tests {
                 "sh",
                 &[
                     "-c",
-                    "curl -fsSL https://raw.githubusercontent.com/caokai674/codefx/main/scripts/install/install-codefx.sh | CODEFX_REPLACE_OFFICIAL=1 CODEX_NON_INTERACTIVE=1 sh"
+                    "set -eu; installer=\"$(mktemp)\"; trap 'rm -f \"$installer\"' EXIT; curl -fsSL -o \"$installer\" https://raw.githubusercontent.com/caokai674/codefx/main/scripts/install/install-codefx.sh; test -s \"$installer\"; CODEFX_REPLACE_OFFICIAL=1 CODEX_NON_INTERACTIVE=1 sh \"$installer\""
                 ][..],
             )
         );

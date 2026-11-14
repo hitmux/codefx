@@ -42,6 +42,9 @@ pub(super) fn truncated_path_variants(path: &str) -> Vec<String> {
 
 pub(crate) fn normalize_snapshot_paths(text: impl Into<String>) -> String {
     let mut text = text.into();
+    // Snapshot fixtures must be stable regardless of the compiled crate version.
+    let version = format!("OpenAI Codex (v{})", env!("CARGO_PKG_VERSION"));
+    text = text.replace(&version, "OpenAI Codex (v0.0.0)");
 
     for unix_path in ["/tmp/project", "/tmp/hooks.json"] {
         let platform_path = test_path_display(unix_path);
