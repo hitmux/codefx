@@ -11186,7 +11186,6 @@ dependencies = [
  "cfg-if",
  "foreign-types",
  "libc",
- "once_cell",
  "openssl-macros",
  "openssl-sys",
 ]
