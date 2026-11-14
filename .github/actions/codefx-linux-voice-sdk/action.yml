@@ -43,8 +43,15 @@ runs:
         set -euo pipefail
         sdk="$RUNNER_TEMP/codefx-voice-sdk"
         test -f "$sdk/sdk.json"
+        wrapper="$RUNNER_TEMP/codefx-voice-pkg-config"
+        cat > "$wrapper" <<'EOF'
+        #!/bin/sh
+        exec /usr/bin/pkg-config --define-prefix "$@"
+        EOF
+        chmod +x "$wrapper"
         # Keep the SDK ahead of host packages so GNU Cargo uses the same
         # GLib/GStreamer versions as Bazel. ALSA remains a system ABI input.
         echo "PKG_CONFIG_PATH=$sdk/lib/pkgconfig" >> "$GITHUB_ENV"
+        echo "PKG_CONFIG=$wrapper" >> "$GITHUB_ENV"
         echo "LD_LIBRARY_PATH=$sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
-        PKG_CONFIG_PATH="$sdk/lib/pkgconfig" pkg-config --atleast-version=1.28 gstreamer-audio-1.0
+        PKG_CONFIG_PATH="$sdk/lib/pkgconfig" "$wrapper" --atleast-version=1.28 gstreamer-audio-1.0
