@@ -93,11 +93,25 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      # cargo-shear asks Cargo for fresh metadata and may rewrite the lockfile
-      # with the runner's Cargo version even when the dependency audit passes.
-      # The lockfile is an input to this check, so discard that incidental
-      # rewrite before the shared clean-worktree guard runs.
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: cargo-shear@1.11.2
+      - name: cargo shear
+        shell: bash
+        run: |
+          set -euo pipefail
+          # cargo-shear may refresh Cargo.lock while it asks Cargo for metadata.
+          # Run it in an isolated copy so the fast gate remains read-only.
+          shear_dir="$RUNNER_TEMP/codex-rs-cargo-shear"
+          rm -rf "$shear_dir"
+          mkdir -p "$shear_dir"
+          cp -a . "$shear_dir/"
+          cd "$shear_dir"
+          cargo shear --deny-warnings
+
+      # Keep this guard for future cargo tooling that may touch the checkout.
       - name: Restore Cargo.lock after cargo shear
+        if: always()
         run: git checkout -- Cargo.lock
 
       - name: Check for a clean worktree
