@@ -39,7 +39,8 @@ def main():
                 {"name": archive.name, "digest": f"sha256:{archive_digest}"},
                 {
                     "name": checksum.name,
-                    "digest": "sha256:" + hashlib.sha256(checksum.read_bytes()).hexdigest(),
+                    "digest": "sha256:"
+                    + hashlib.sha256(checksum.read_bytes()).hexdigest(),
                 },
             ],
         }

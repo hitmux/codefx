@@ -38,7 +38,9 @@ class LinuxProjection(unittest.TestCase):
 
     def test_missing_command_and_new_skip_condition_are_drift(self):
         path = ".github/workflows/rust-ci.yml"
-        official = "jobs:\n  shear:\n    steps:\n      - run: cargo shear --deny-warnings\n"
+        official = (
+            "jobs:\n  shear:\n    steps:\n      - run: cargo shear --deny-warnings\n"
+        )
         mutations = (
             official.replace("      - run: cargo shear --deny-warnings\n", ""),
             official.replace("      - run:", "      - if: false\n        run:"),
@@ -66,7 +68,9 @@ class LinuxProjection(unittest.TestCase):
             "      - tests_macos_aarch64\n      - tests_windows_x64\n"
             "    run: summarize\n"
         )
-        projected = policy.linux_projection(".github/workflows/rust-ci-full.yml", source)
+        projected = policy.linux_projection(
+            ".github/workflows/rust-ci-full.yml", source
+        )
         self.assertIn("tests_linux_arm64", projected)
         self.assertIn("run: summarize", projected)
         self.assertNotIn("tests_macos_aarch64", projected)
@@ -86,7 +90,8 @@ class RequiredGate(unittest.TestCase):
                 weakened = self.blocking.replace(f"      - {job}\n", "")
                 self.assertTrue(policy.gate_errors(weakened))
                 weakened = self.blocking.replace(
-                    f"uses: ./.github/workflows/{job}.yml", "uses: ./.github/workflows/rust-ci.yml"
+                    f"uses: ./.github/workflows/{job}.yml",
+                    "uses: ./.github/workflows/rust-ci.yml",
                 )
                 self.assertTrue(policy.gate_errors(weakened))
 

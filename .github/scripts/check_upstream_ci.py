@@ -37,14 +37,16 @@ def linux_projection(path: str, text: str) -> str:
         text = re.sub(
             r"(?ms)^          - (?:os|name|runner):.*?"
             r"(?=^          - (?:os|name|runner):|^    \S|\Z)",
-            lambda match: match.group()
-            if re.search(
-                r"^            (?:runner|target): .*(?:linux|ubuntu)|"
-                r"^          - (?:os|runner): ubuntu",
-                match.group(),
-                re.M,
-            )
-            else "",
+            lambda match: (
+                match.group()
+                if re.search(
+                    r"^            (?:runner|target): .*(?:linux|ubuntu)|"
+                    r"^          - (?:os|runner): ubuntu",
+                    match.group(),
+                    re.M,
+                )
+                else ""
+            ),
             text,
         )
         for result in REMOVED_RESULTS:
@@ -97,9 +99,7 @@ def job_blocks(text: str) -> dict[str, str]:
     body = text.partition("\njobs:\n")[2]
     return {
         match[1]: match[0]
-        for match in re.finditer(
-            r"(?ms)^  ([\w-]+):\n.*?(?=^  [\w-]+:|\Z)", body
-        )
+        for match in re.finditer(r"(?ms)^  ([\w-]+):\n.*?(?=^  [\w-]+:|\Z)", body)
     }
 
 
@@ -173,7 +173,9 @@ def main():
         "package"
     ]["version"]
     if manifest["tag"] != f"rust-v{version}":
-        raise SystemExit("Update the official CI baseline together with the source version")
+        raise SystemExit(
+            "Update the official CI baseline together with the source version"
+        )
     errors = baseline_errors(ROOT, args.upstream, manifest["files"])
     blocking = (ROOT / ".github/workflows/blocking-ci.yml").read_text()
     errors.extend(gate_errors(blocking))
