@@ -243,6 +243,13 @@ jobs:
             cargo "${cargo_args[@]}"
           )
 
+      # The native Cargo smoke asks Cargo to resolve the staged V8 crate and
+      # may rewrite codex-rs/Cargo.lock with the runner's Cargo version.
+      # Discard that incidental rewrite before the shared clean-worktree guard.
+      - name: Restore Cargo.lock after Cargo smoke
+        if: always() && !cancelled()
+        run: git checkout -- codex-rs/Cargo.lock
+
       - name: Upload staged artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
