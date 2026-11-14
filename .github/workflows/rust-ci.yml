@@ -179,7 +179,8 @@ jobs:
         include:
           - name: Linux
             runner: ubuntu-24.04
-            timeout_minutes: 30
+            # Cold fork PRs may build the Bazel linter graph from scratch.
+            timeout_minutes: 60
     steps:
       - name: Check whether argument comment lint should run
         id: argument_comment_lint_gate
