@@ -14,7 +14,7 @@ runs:
       uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ${{ runner.temp }}/codefx-voice-sdk
-        key: codefx-voice-sdk-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('third_party/voice/**', 'MODULE.bazel', 'MODULE.bazel.lock') }}
+        key: codefx-voice-sdk-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('third_party/voice/**', 'MODULE.bazel', 'MODULE.bazel.lock') }}
     - name: Prepare native SDK build tools
       if: steps.cache.outputs.cache-hit != 'true'
       uses: ./.github/actions/prepare-bazel-ci
@@ -30,13 +30,20 @@ runs:
         # The official Bazel recipe verifies pinned source archives and exports
         # relocatable development inputs from its inspected native runtime.
         ./.github/scripts/run-bazel-ci.sh --remote-download-toplevel -- \
-          build --platforms=//:local_linux -- //third_party/voice:native_sdk
+          build --platforms=//:local_linux -- \
+          //third_party/voice:native_sdk //third_party/voice:native_runtime
         sdk="$(./.github/scripts/run-bazel-ci.sh -- \
           cquery --platforms=//:local_linux --output=files -- \
           //third_party/voice:native_sdk | grep -E '^(/|bazel-out/)')"
         test -d "$sdk"
         mkdir -p "$RUNNER_TEMP/codefx-voice-sdk"
         cp -a "$sdk/." "$RUNNER_TEMP/codefx-voice-sdk/"
+        runtime="$(./.github/scripts/run-bazel-ci.sh -- \
+          cquery --platforms=//:local_linux --output=files -- \
+          //third_party/voice:native_runtime | grep -E '^(/|bazel-out/)')"
+        test -d "$runtime"
+        mkdir -p "$RUNNER_TEMP/codefx-voice-sdk/runtime"
+        cp -a "$runtime/." "$RUNNER_TEMP/codefx-voice-sdk/runtime/"
     - name: Configure Cargo development inputs and runtime libraries
       shell: bash
       run: |
@@ -54,4 +61,7 @@ runs:
         echo "PKG_CONFIG_PATH=$sdk/lib/pkgconfig" >> "$GITHUB_ENV"
         echo "PKG_CONFIG=$wrapper" >> "$GITHUB_ENV"
         echo "LD_LIBRARY_PATH=$sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+        echo "GST_PLUGIN_SYSTEM_PATH_1_0=$sdk/runtime/lib/gstreamer-1.0" >> "$GITHUB_ENV"
+        echo "GST_PLUGIN_PATH_1_0=$sdk/runtime/lib/gstreamer-1.0" >> "$GITHUB_ENV"
+        echo "GST_REGISTRY=$RUNNER_TEMP/codefx-voice-registry.bin" >> "$GITHUB_ENV"
         PKG_CONFIG_PATH="$sdk/lib/pkgconfig" "$wrapper" --atleast-version=1.28 gstreamer-audio-1.0
