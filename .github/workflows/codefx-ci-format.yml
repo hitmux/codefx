@@ -1,0 +1,45 @@
+name: Codefx CI formatting suggestions
+on:
+  pull_request:
+    paths:
+      - .github/**
+      - scripts/install/smoke_source_package.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  suggestions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.13.5"
+      - uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          run_install: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .nvmrc
+      - name: Prepare formatters from repository locks
+        run: pnpm install --frozen-lockfile
+      - name: Produce formatting patch in CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --frozen --project scripts ruff format \
+            .github/scripts/check_upstream_ci.py \
+            .github/scripts/test_upstream_ci.py \
+            scripts/install/smoke_source_package.py
+          pnpm exec prettier --write .github/workflows/*.yml .github/upstream-ci.json .github/CI_POLICY.md .github/workflows/README.md
+          git diff --binary > "$RUNNER_TEMP/codefx-ci-format.patch"
+          git diff --stat
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: codefx-ci-format
+          path: ${{ runner.temp }}/codefx-ci-format.patch
+          if-no-files-found: error
+          retention-days: 3
