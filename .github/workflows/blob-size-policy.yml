@@ -15,15 +15,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Fence is an observational audit. Its resident service can fail to start
-      # on some hosted runners, independently of the repository's blob policy.
-      # Keep the audit visible while preserving the mandatory size check.
-      - name: Fence audit (best effort)
-        continue-on-error: true
-        uses: openai/fence@e017427978b91977d79a3023842166ab79b5b816 # pin@v0.12.2
-        with:
-          mode: audit
-
       - name: Determine comparison range
         id: range
         shell: bash

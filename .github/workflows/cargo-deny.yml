@@ -25,8 +25,8 @@ jobs:
         env:
           # Docker actions otherwise place Cargo's git checkout cache in the
           # small container overlay. rusty_v8's submodules need several GB,
-          # so keep the cache on the runner's mounted temporary volume.
-          CARGO_HOME: /github/runner_temp/cargo-home
+          # so keep the cache on the runner's mounted home volume.
+          CARGO_HOME: /github/home/cargo-home
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         with:
           rust-version: 1.95.0
