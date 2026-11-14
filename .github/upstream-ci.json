@@ -13,6 +13,7 @@
     ".github/workflows/rust-ci-full.yml",
     ".github/workflows/rust-ci-full-nextest-platform.yml",
     ".github/workflows/sdk.yml",
+    ".github/workflows/v8-canary.yml",
     ".github/actions/check-clean-worktree/action.yml",
     ".github/actions/prepare-bazel-ci/action.yml",
     ".github/actions/run-argument-comment-lint/action.yml",
@@ -23,6 +24,7 @@
     ".github/scripts/run_bazel_with_buildbuddy.py",
     ".github/scripts/run-argument-comment-lint-bazel.sh",
     ".github/scripts/rusty_v8_bazel.py",
+    ".github/scripts/v8_canary_changes.py",
     "scripts/check-module-bazel-lock.sh",
     "scripts/list-bazel-clippy-targets.sh",
     "scripts/list-bazel-release-targets.sh"

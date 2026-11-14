@@ -28,6 +28,10 @@ The only permitted adaptations in `check_upstream_ci.py` are:
   graph and manifests are unchanged; resolution or worktree changes must fail.
 - Omit the unavailable OpenAI Fence audit hook; retain the blob-size check.
 
+The V8 canary retains native GNU and musl Cargo smoke, target selection and
+ignored-test execution from upstream. Its Windows source build is removed.
+The retired upstream publishing workflows must remain absent.
+
 BuildBuddy remains optional through the official wrapper's existing fallback.
 Absent credentials must never disable tests or lint. Runner capacity failures
 remain failures and must be addressed as infrastructure problems.

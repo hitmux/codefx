@@ -16,7 +16,7 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 REMOVED_RESULTS = ("tests_macos_aarch64", "tests_windows_x64", "tests_windows_arm64")
-PLATFORM_WORKFLOWS = {"bazel.yml", "rust-ci.yml", "rust-ci-full.yml"}
+PLATFORM_WORKFLOWS = {"bazel.yml", "rust-ci.yml", "rust-ci-full.yml", "v8-canary.yml"}
 RUNNER_ADAPTER = """    - name: Adapt Codefx hosted Linux resources
       if: runner.os == 'Linux'
       uses: ./.github/actions/codefx-linux-runner
@@ -29,7 +29,7 @@ def linux_projection(path: str, text: str) -> str:
     name = Path(path).name
     if name in PLATFORM_WORKFLOWS:
         text = re.sub(
-            r"(?ms)^  (?:test-windows[^:]*|tests_windows[^:]*|tests_macos[^:]*):\n"
+            r"(?ms)^  (?:test-windows[^:]*|tests_windows[^:]*|tests_macos[^:]*|build-windows[^:]*):\n"
             r".*?(?=^  [a-zA-Z_][\w-]*:|\Z)",
             "",
             text,
@@ -194,6 +194,15 @@ def main():
         ):
             if not (path.parent / called).is_file():
                 errors.append(f"Missing reusable workflow: {called}")
+    for obsolete in (
+        "rust-release.yml",
+        "rust-release-windows.yml",
+        "rust-release-provisioned-macos.yml",
+        "rusty-v8-release.yml",
+        "rust-release-argument-comment-lint.yml",
+    ):
+        if (ROOT / ".github/workflows" / obsolete).exists():
+            errors.append(f"Unsupported upstream publisher restored: {obsolete}")
     if errors:
         raise SystemExit("\n".join(errors))
     print(f"Official Linux CI matches {manifest['tag']} ({manifest['commit']})")

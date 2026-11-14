@@ -36,6 +36,23 @@ class LinuxProjection(unittest.TestCase):
         self.assertNotIn("name: Windows", projected)
         self.assertIn("run: lint", projected)
 
+    def test_v8_linux_smoke_keeps_target_and_ignored_tests(self):
+        source = (
+            "jobs:\n  build:\n    strategy:\n      matrix:\n        include:\n"
+            "          - runner: ubuntu-24.04\n"
+            "            target: x86_64-unknown-linux-musl\n"
+            "          - runner: macos-15-xlarge\n"
+            "            target: aarch64-apple-darwin\n"
+            "    steps:\n"
+            '      - run: cargo test --target "${TARGET}" -- --include-ignored\n'
+            "  build-windows-source:\n    runs-on: windows-2025\n"
+        )
+        projected = policy.linux_projection(".github/workflows/v8-canary.yml", source)
+        self.assertIn("target: x86_64-unknown-linux-musl", projected)
+        self.assertIn('--target "${TARGET}" -- --include-ignored', projected)
+        self.assertNotIn("build-windows-source", projected)
+        self.assertNotIn("target: aarch64-apple-darwin", projected)
+
     def test_missing_command_and_new_skip_condition_are_drift(self):
         path = ".github/workflows/rust-ci.yml"
         official = (
