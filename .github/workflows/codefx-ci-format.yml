@@ -3,11 +3,49 @@ on:
   pull_request:
     paths:
       - .github/**
+      - codex-rs/**/Cargo.toml
+      - codex-rs/Cargo.lock
+      - codex-rs/v8-poc/**
+      - vendor/**/Cargo.toml
       - scripts/install/smoke_source_package.py
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
+  cargo-suggestions:
+    name: Cargo lockfile and Rust formatting suggestions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          components: rustfmt
+      - name: Produce a minimal lockfile repair and Rust formatting patch
+        working-directory: codex-rs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/codefx-cargo-source.txt"
+          # Resolve the existing graph without requesting dependency upgrades.
+          # Ordinary validation keeps --locked and rejects any worktree drift.
+          cargo metadata --format-version 1 > "$RUNNER_TEMP/codefx-cargo-metadata.json"
+          cargo metadata --locked --offline --format-version 1 > /dev/null
+          cargo fmt --package codex-v8-poc -- --config imports_granularity=Item
+          git diff --binary -- Cargo.lock v8-poc/src/lib.rs > "$RUNNER_TEMP/codefx-cargo-repair.patch"
+          git diff --stat
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: codefx-cargo-repair
+          path: |
+            ${{ runner.temp }}/codefx-cargo-repair.patch
+            ${{ runner.temp }}/codefx-cargo-source.txt
+          if-no-files-found: error
+          retention-days: 3
   suggestions:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

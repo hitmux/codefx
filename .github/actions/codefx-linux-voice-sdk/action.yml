@@ -14,7 +14,7 @@ runs:
       uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ${{ runner.temp }}/codefx-voice-sdk
-        key: codefx-voice-sdk-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('third_party/voice/**', 'MODULE.bazel', 'MODULE.bazel.lock') }}
+        key: codefx-voice-sdk-v3-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('third_party/voice/**', 'MODULE.bazel', 'MODULE.bazel.lock', '.github/actions/codefx-linux-voice-sdk/action.yml') }}
     - name: Prepare native SDK build tools
       if: steps.cache.outputs.cache-hit != 'true'
       uses: ./.github/actions/prepare-bazel-ci
@@ -38,12 +38,16 @@ runs:
         test -d "$sdk"
         mkdir -p "$RUNNER_TEMP/codefx-voice-sdk"
         cp -a "$sdk/." "$RUNNER_TEMP/codefx-voice-sdk/"
+        # Bazel outputs are read-only. The staged copy must accept the runtime
+        # directory and remain writable when restored from the Actions cache.
+        chmod -R u+w "$RUNNER_TEMP/codefx-voice-sdk"
         runtime="$(./.github/scripts/run-bazel-ci.sh -- \
           cquery --platforms=//:local_linux --output=files -- \
           //third_party/voice:native_runtime | grep -E '^(/|bazel-out/)')"
         test -d "$runtime"
         mkdir -p "$RUNNER_TEMP/codefx-voice-sdk/runtime"
         cp -a "$runtime/." "$RUNNER_TEMP/codefx-voice-sdk/runtime/"
+        chmod -R u+w "$RUNNER_TEMP/codefx-voice-sdk/runtime"
     - name: Configure Cargo development inputs and runtime libraries
       shell: bash
       run: |
