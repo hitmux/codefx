@@ -49,6 +49,12 @@ jobs:
 
   # Keep reusable workflow calls alphabetized. The required job below is the
   # version-controlled list that the main-branch ruleset should require.
+  bazel:
+    name: Bazel compatibility
+    needs: ci-policy
+    uses: ./.github/workflows/bazel.yml
+    secrets: inherit
+
   blob-size-policy:
     name: Blob size policy
     uses: ./.github/workflows/blob-size-policy.yml
@@ -107,6 +113,7 @@ jobs:
     if: ${{ always() }}
     needs:
       - ci-policy
+      - bazel
       - linux-cargo
       - blob-size-policy
       - cargo-deny

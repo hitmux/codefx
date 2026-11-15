@@ -8,6 +8,32 @@ import check_upstream_ci as policy
 
 
 class LinuxProjection(unittest.TestCase):
+    def test_workspace_argument_comment_lint_stays_in_the_pr_graph(self):
+        path = ".github/workflows/rust-ci.yml"
+        official = (
+            "jobs:\n  argument_comment_lint_prebuilt:\n"
+            "    runs-on: ubuntu-24.04\n"
+            "    steps:\n      - uses: ./.github/actions/run-argument-comment-lint\n"
+            "  results:\n    needs: [argument_comment_lint_prebuilt]\n"
+            "    run: summarize\n"
+        )
+        projected = policy.linux_projection(path, official)
+        self.assertEqual(projected, official)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "fork"
+            upstream = Path(temp) / "upstream"
+            for directory in (root, upstream):
+                (directory / path).parent.mkdir(parents=True)
+            (upstream / path).write_text(official)
+            for mutation in (
+                projected.replace("      - uses: ./.github/actions/run-argument-comment-lint\n", ""),
+                projected.replace("needs: [argument_comment_lint_prebuilt]", "needs: []"),
+                projected.replace("    steps:\n", "    if: false\n    steps:\n"),
+            ):
+                with self.subTest(mutation=mutation):
+                    (root / path).write_text(mutation)
+                    self.assertTrue(policy.baseline_errors(root, upstream, [path]))
+
     def test_linux_binding_generation_preserves_archive_verification(self):
         path = ".github/actions/setup-rusty-v8/action.yml"
         official = "runs:\n  using: composite\n  steps:\n    - run: sha256sum --check manifest\n"
@@ -181,8 +207,8 @@ class RequiredGate(unittest.TestCase):
     def test_all_current_checks_are_required(self):
         self.assertEqual(policy.gate_errors(self.blocking), [])
 
-    def test_disconnected_cargo_or_sdk_cannot_pass(self):
-        for job in ("linux-cargo", "sdk"):
+    def test_disconnected_bazel_cargo_or_sdk_cannot_pass(self):
+        for job in ("bazel", "linux-cargo", "sdk"):
             with self.subTest(job=job):
                 weakened = self.blocking.replace(f"      - {job}\n", "")
                 self.assertTrue(policy.gate_errors(weakened))
@@ -193,9 +219,10 @@ class RequiredGate(unittest.TestCase):
                 self.assertTrue(policy.gate_errors(weakened))
 
     def test_required_call_cannot_ignore_failure_or_run_conditionally(self):
-        for condition in ("if: false", "continue-on-error: true"):
-            weakened = self.blocking.replace("  sdk:\n", f"  sdk:\n    {condition}\n")
-            self.assertTrue(policy.gate_errors(weakened))
+        for job in ("bazel", "sdk"):
+            for condition in ("if: false", "continue-on-error: true"):
+                weakened = self.blocking.replace(f"  {job}:\n", f"  {job}:\n    {condition}\n")
+                self.assertTrue(policy.gate_errors(weakened))
 
     def test_required_coverage_is_preserved(self):
         self.assertEqual(policy.coverage_errors(policy.ROOT), [])

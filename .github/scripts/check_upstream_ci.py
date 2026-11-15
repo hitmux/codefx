@@ -88,29 +88,6 @@ def linux_projection(path: str, text: str) -> str:
             "name: Bazel test on ${{ matrix.os }} for ${{ matrix.target }}",
             "name: Bazel native GNU tests on ${{ matrix.os }}",
         )
-    if name == "rust-ci.yml":
-        start = (
-            text.index("  argument_comment_lint_prebuilt:\n")
-            if "  argument_comment_lint_prebuilt:\n" in text
-            else -1
-        )
-        if start >= 0:
-            end = text.index("  # --- Gatherer", start)
-            text = text[:start] + text[end:]
-            text = text.replace("        argument_comment_lint_prebuilt,\n", "")
-            text = text.replace(
-                '          echo "arglint: ${{ needs.argument_comment_lint_prebuilt.result }}"\n',
-                "",
-            )
-            start = text.index(
-                '          if [[ "${NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT}" =='
-            )
-            end = text.index('          if [[ "${NEEDS_CHANGED_OUTPUTS_CODEX}"', start)
-            text = text[:start] + text[end:]
-            text = text.replace(
-                "    needs:\n      [\n        changed,\n        general,\n        cargo_shear,\n        argument_comment_lint_package,\n      ]\n",
-                "    needs: [changed, general, cargo_shear, argument_comment_lint_package]\n",
-            )
     if name == "sdk.yml":
         text = re.sub(
             r"    runs-on:\n      group:.*\n      labels:.*\n",
@@ -233,6 +210,7 @@ def job_blocks(text: str) -> dict[str, str]:
 def gate_errors(blocking: str) -> list[str]:
     jobs = job_blocks(blocking)
     calls = {
+        "bazel": "bazel.yml",
         "linux-cargo": "codefx-linux-cargo.yml",
         "blob-size-policy": "blob-size-policy.yml",
         "cargo-deny": "cargo-deny.yml",
@@ -253,7 +231,7 @@ def gate_errors(blocking: str) -> list[str]:
     required = jobs.get("required", "")
     needs = set(re.findall(r"(?m)^      - ([\w-]+)$", required))
     if needs != set(calls) | {"ci-policy"}:
-        errors.append("CI required must depend on all fast coverage and Codefx checks")
+        errors.append("CI required must depend on all official Linux and Codefx checks")
     if "    if: ${{ always() }}" not in required:
         errors.append("CI required must report failures even when dependencies fail")
     if "run: python3 .github/scripts/check_ci_results.py" not in required:

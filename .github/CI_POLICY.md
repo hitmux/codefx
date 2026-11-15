@@ -22,6 +22,8 @@ packages never substitute for the candidate.
 
 - Baseline and coverage policy, including mutation/fault regression tests.
 - Fast Rust formatting, dependency usage, benchmark smoke and lint-tool tests.
+- The official Linux Bazel test graph, Clippy and release configuration checks.
+- Workspace argument-comment lint whenever Rust or CI inputs change.
 - GNU Cargo Clippy over the workspace, including test targets.
 - GNU Cargo nextest over every workspace package. Core, TUI and app-server use
   dedicated build groups; other packages are assigned deterministically to three
@@ -40,9 +42,9 @@ verification and reuses those executables instead of compiling V8 a second time.
 
 ## Extended compatibility
 
-`codefx-extended-ci.yml` preserves the full Bazel test graph, Clippy and release
-configuration checks as separately reported compatibility checks on main and
-manual runs. `postmerge-ci.yml` retains full Linux Cargo and V8 verification;
+`codefx-extended-ci.yml` also exposes the required Bazel checks as standalone
+compatibility checks on main and manual runs. `postmerge-ci.yml` retains full
+Linux Cargo and V8 verification;
 `rust-ci-full.yml` also supports manual runs and `full-ci` branches. The expensive
 workspace argument-comment lint remains in full Cargo CI.
 
@@ -58,8 +60,6 @@ The policy checker permits only these reviewed transformations:
 
 - Remove unsupported Windows/macOS runners and retired upstream publishers.
 - Replace private Linux runners with hosted Ubuntu and allow cold-build budgets.
-- Move the workspace Bazel argument-comment lint out of the fast Rust workflow;
-  keep its tool tests in fast CI and its workspace execution in full CI.
 - Replace the SDK's Bazel CLI build with a verified same-run source package,
   preserving SDK commands and running Jest serially on the small runner.
 - Remove the duplicate Bazel test entry labelled musl: its matrix value only
