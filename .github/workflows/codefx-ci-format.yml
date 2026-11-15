@@ -15,9 +15,41 @@ on:
         description: Run focused HTTP transport regressions on the selected source
         type: boolean
         default: false
+      plugin_regressions:
+        description: Verify plugin isolation and local plugin compatibility
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
+  plugin-regressions:
+    if: github.event_name == 'workflow_dispatch' && inputs.plugin_regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
+      RUST_BACKTRACE: "1"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - name: Reuse Cargo download inputs
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-sources-v2-${{ runner.os }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: cargo-nextest@0.9.103
+      - name: Verify all feature and plugin library regressions
+        working-directory: codex-rs
+        run: cargo nextest run --locked -p codex-features -p codex-core-plugins --lib --no-fail-fast --test-threads 2
   http-regressions:
     if: github.event_name == 'workflow_dispatch' && inputs.http_regressions
     runs-on: ubuntu-24.04
