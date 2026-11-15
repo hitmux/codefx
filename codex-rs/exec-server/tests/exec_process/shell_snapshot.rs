@@ -207,8 +207,7 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
         let command = command.clone();
         let protected_path = protected_file.path();
         async move {
-            let started = backend
-                .start(ExecParams {
+            let params = ExecParams {
                     metadata: Default::default(),
                     process_id: format!("parallel-{index}").into(),
                     argv: vec![format!("/bin/{shell}"), "-lc".to_string(), command],
@@ -242,8 +241,21 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
                     enforce_managed_network: false,
                     managed_network: None,
                     network_proxy: None,
-                })
-                .await?;
+                };
+            if deny_fd_path && index == 0 {
+                let mut probe = params.clone();
+                probe.process_id = "descriptor-sandbox-probe".into();
+                probe.argv[2] = "printf sandbox-ready".to_string();
+                probe.shell_snapshot = None;
+                probe.pipe_stdin = false;
+                let probe = backend.start(probe).await?;
+                assert_eq!(
+                    collect_process_output_from_events(probe.process).await?,
+                    ("sandbox-ready".to_string(), String::new(), Some(0), true),
+                    "descriptor denial must allow ordinary sandboxed commands",
+                );
+            }
+            let started = backend.start(params).await?;
             started
                 .process
                 .write(format!("input-{index}\n").into_bytes())
@@ -252,7 +264,7 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
                 collect_process_output_from_events(started.process).await?;
             assert!(
                 output.ends_with(&format!("restored:input-{index}")),
-                "{output:?}"
+                "stdout={output:?}, stderr={errors:?}, status={status:?}, closed={closed}"
             );
             if shell == "zsh" {
                 assert!(

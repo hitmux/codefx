@@ -23,6 +23,11 @@ on:
         description: Diagnose CLI startup and shell snapshot regressions
         type: boolean
         default: false
+      runtime_component:
+        description: Runtime component to verify
+        type: choice
+        options: [all, exec, shell]
+        default: all
 permissions:
   contents: read
 jobs:
@@ -33,13 +38,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [exec, shell]
+        component: ${{ fromJSON(inputs.runtime_component == 'shell' && '["shell"]' || inputs.runtime_component == 'exec' && '["exec"]' || '["exec","shell"]') }}
     env:
       CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_CI_TEST_DEBUG: "0"
       CARGO_INCREMENTAL: "0"
       RUST_BACKTRACE: "1"
       RUST_LOG: codex_exec_server=warn
+      RUST_MIN_STACK: "8388608"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -53,7 +59,9 @@ jobs:
         with:
           target: x86_64-unknown-linux-gnu
       - name: Install sandbox test prerequisites
-        run: sudo apt-get install -y --no-install-recommends build-essential libcap-dev bubblewrap
+        run: |
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends build-essential libcap-dev bubblewrap
       - name: Reuse Cargo download inputs
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:

@@ -58,9 +58,9 @@ class LinuxProjection(unittest.TestCase):
         official = (
             'cargo_args=(test -p codex-v8-poc --target "${TARGET}")\n'
             'if [[ "${SANDBOX}" == "true" ]]; then\n'
-            '  cargo_args+=(--features sandbox)\n'
-            'fi\n'
-            'cargo_args+=(-- --include-ignored)\n'
+            "  cargo_args+=(--features sandbox)\n"
+            "fi\n"
+            "cargo_args+=(-- --include-ignored)\n"
         )
         projected = policy.linux_projection(path, official)
         self.assertIn("--no-default-features", projected)
