@@ -5183,19 +5183,6 @@ fn rewrite_cached_remote_catalog_fetched_at(
     Ok(())
 }
 
-async fn wait_for_path_exists(path: &std::path::Path) -> Result<()> {
-    timeout(DEFAULT_TIMEOUT, async {
-        loop {
-            if path.exists() {
-                return Ok::<(), anyhow::Error>(());
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await??;
-    Ok(())
-}
-
 async fn trigger_plugin_installed_sync(mcp: &mut TestAppServer) -> Result<()> {
     let request_id = mcp
         .send_plugin_installed_request(PluginInstalledParams {
