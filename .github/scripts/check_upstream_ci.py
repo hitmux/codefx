@@ -143,6 +143,11 @@ def linux_projection(path: str, text: str) -> str:
         )
     if name == "rust-ci-full.yml":
         text = text.replace(
+            "name: Tests — ubuntu-24.04 - x86_64-unknown-linux-gnu (remote)",
+            "name: Tests — ubuntu-24.04 - x86_64-unknown-linux-gnu (local)",
+        )
+        text = text.replace("      remote_env: true\n", "      remote_env: false\n")
+        text = text.replace(
             "      USE_SCCACHE: ${{ (startsWith(matrix.runner, 'windows') || (matrix.runner == 'macos-15-xlarge' && matrix.target == 'x86_64-apple-darwin')) && 'false' || 'true' }}",
             '      USE_SCCACHE: "true"',
         )
