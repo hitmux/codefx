@@ -8,6 +8,37 @@ import check_upstream_ci as policy
 
 
 class LinuxProjection(unittest.TestCase):
+    def test_linux_test_archives_keep_the_verified_runtime_payload(self):
+        path = ".github/workflows/rust-ci-full-nextest-platform.yml"
+        official = (
+            "      - name: Build nextest archive\n"
+            '        run: cargo nextest archive --workspace\n'
+            '            cp "${CARGO_TARGET_DIR}/${CODEX_CI_TARGET}/${CODEX_CI_PROFILE}/codex-linux-sandbox" "${helper_dir}/"\n'
+            "      - name: tests\n"
+            '            chmod +x "${helper_target_dir}/codex-linux-sandbox"\n'
+            '            cargo nextest run --archive-file "$archive_file"\n'
+        )
+        projected = policy.linux_projection(path, official)
+        self.assertIn("CODEX_BWRAP_SHA256", projected)
+        self.assertIn("sha256sum --check bwrap.sha256", projected)
+        self.assertIn("run: cargo nextest archive --workspace", projected)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "fork"
+            upstream = Path(temp) / "upstream"
+            for directory in (root, upstream):
+                (directory / path).parent.mkdir(parents=True)
+            (upstream / path).write_text(official)
+            (root / path).write_text(projected)
+            self.assertEqual(policy.baseline_errors(root, upstream, [path]), [])
+            for mutation in (
+                projected.replace(" --bin bwrap", " --bin codex"),
+                projected.replace("sha256sum --check bwrap.sha256", "true"),
+                projected.replace(policy.LINUX_RUNTIME_EXPORT, ""),
+            ):
+                with self.subTest(mutation=mutation):
+                    (root / path).write_text(mutation)
+                    self.assertTrue(policy.baseline_errors(root, upstream, [path]))
+
     def test_workspace_argument_comment_lint_stays_in_the_pr_graph(self):
         path = ".github/workflows/rust-ci.yml"
         official = (

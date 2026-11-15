@@ -70,6 +70,10 @@ The policy checker permits only these reviewed transformations:
 - Set the CI test profile to no debug information and no incremental state.
   Bound sccache to 2 GiB, share download-only Cargo caches across profiles and
   pin installed tool versions using the install action's supported `tool` input.
+- Build the Linux sandbox payload before test archival, compile its digest into
+  consumers, and transfer the payload and digest with runtime test helpers.
+  Test runners verify the digest before staging the executable beside the CLI.
+  Resolve compatibility release inputs on both archive and test runners.
 - Put Zig's local cache outside the checkout and report disk consumption.
 - Supply the checksum-verified Codex V8 archive and pinned GNU voice SDK/runtime.
   Keep voice version probes, voice tests and V8 consumers enabled.

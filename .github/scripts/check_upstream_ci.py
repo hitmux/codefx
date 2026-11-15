@@ -32,6 +32,38 @@ V8_ARCHIVE_STEP = """      - name: Configure rusty_v8 artifact overrides and ver
         with:
           target: ${{ inputs.target }}
 """
+LINUX_RUNTIME_PREPARATION_STEP = """      - name: Prepare Linux runtime payload and compatibility inputs
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          releases="$(python3 ../.github/scripts/resolve_exec_server_releases.py)"
+          echo "CODEX_COMPAT_RELEASES=$releases" >> "$GITHUB_ENV"
+          cargo build --locked --target "$CODEX_CI_TARGET" --profile "$CODEX_CI_PROFILE" --bin bwrap
+          runtime="$CARGO_TARGET_DIR/$CODEX_CI_TARGET/$CODEX_CI_PROFILE"
+          digest="$(sha256sum "$runtime/bwrap" | cut -d ' ' -f 1)"
+          echo "CODEX_BWRAP_SHA256=$digest" >> "$GITHUB_ENV"
+          install -Dm755 "$runtime/bwrap" "$runtime/codex-resources/bwrap"
+
+"""
+LINUX_COMPATIBILITY_STEP = """      - name: Resolve Linux compatibility test inputs
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          releases="$(python3 ../.github/scripts/resolve_exec_server_releases.py)"
+          echo "CODEX_COMPAT_RELEASES=$releases" >> "$GITHUB_ENV"
+
+"""
+LINUX_RUNTIME_EXPORT = """            cp "${CARGO_TARGET_DIR}/${CODEX_CI_TARGET}/${CODEX_CI_PROFILE}/bwrap" "${helper_dir}/"
+            printf '%s  bwrap\\n' "$CODEX_BWRAP_SHA256" > "${helper_dir}/bwrap.sha256"
+"""
+LINUX_RUNTIME_RESTORE = """            (cd "$helper_dir" && sha256sum --check bwrap.sha256)
+            install -Dm755 "$helper_dir/bwrap" "$helper_target_dir/codex-resources/bwrap"
+"""
 
 SDK_PACKAGE_STEPS = '      - name: Download the same-run current source package\n        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1\n        with:\n          name: codefx-source-x86_64-unknown-linux-musl\n          path: ${{ runner.temp }}/sdk-package\n\n      - name: Verify candidate provenance and stage SDK executables\n        run: python3 scripts/install/prepare_sdk_package.py --directory "$RUNNER_TEMP/sdk-package" --output "$RUNNER_TEMP/sdk-runtime"\n\n      - name: Warm up the current source CLI\n        run: \'"${CODEX_EXEC_PATH}" --version\'\n\n'
 
@@ -127,6 +159,18 @@ def linux_projection(path: str, text: str) -> str:
             V8_ARCHIVE_STEP + "      - name: Compute lockfile hash\n",
             1,
         )
+        text = text.replace(
+            "      - name: Build nextest archive\n",
+            LINUX_RUNTIME_PREPARATION_STEP + "      - name: Build nextest archive\n",
+            1,
+        )
+        helper_copy = '            cp "${CARGO_TARGET_DIR}/${CODEX_CI_TARGET}/${CODEX_CI_PROFILE}/codex-linux-sandbox" "${helper_dir}/"\n'
+        text = text.replace(helper_copy, helper_copy + LINUX_RUNTIME_EXPORT)
+        text = text.replace(
+            "      - name: tests\n", LINUX_COMPATIBILITY_STEP + "      - name: tests\n"
+        )
+        helper_chmod = '            chmod +x "${helper_target_dir}/codex-linux-sandbox"\n'
+        text = text.replace(helper_chmod, helper_chmod + LINUX_RUNTIME_RESTORE)
     if name == "rust-ci-full-nextest-platform.yml":
         text = text.replace(
             "      SCCACHE_CACHE_SIZE: 10G",
