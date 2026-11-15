@@ -195,20 +195,37 @@ pub(crate) async fn run_turn(
 
     let mut client_session =
         prewarmed_client_session.unwrap_or_else(|| sess.services.model_client.new_session());
+    // Validate the selected program before compaction can send a request using
+    // the previous model. Report policy rejection as a turn validation error.
+    let program_validation: CodexResult<()> = cyber_access_program::for_auth(
+        sess.services.auth_manager.auth().await.as_ref(),
+        turn_context.cyber_access_program,
+        cyber_access_program::ApiKeyCyberAccessPrograms::from_config(&turn_context.config),
+    ).map(|_| ()).map_err(Into::into);
     // TODO(ccunningham): Pre-turn compaction runs before context updates and the
     // new user message are recorded. Estimate pending incoming items (context
     // diffs/full reinjection + user input) and trigger compaction preemptively
     // when they would push the thread over the compaction threshold.
-    if auto_compaction_enabled
-        && let Err(err) = run_pre_sampling_compact(
+    let (pre_sampling_result, message_prefix) = if let Err(err) = program_validation {
+        (Err(err), None)
+    } else if auto_compaction_enabled {
+        let result = run_pre_sampling_compact(
             &sess,
             &turn_context,
             &mut client_session,
             &cancellation_token,
         )
-        .await
-    {
-        // Compaction runs before the new input is recorded, so preserve it on every failure.
+        .await;
+        let prefix = match turn_context.provider.capabilities().remote_compaction {
+            RemoteCompactionSupport::V2 => Some("Error running remote compact task".to_string()),
+            RemoteCompactionSupport::Unsupported => None,
+        };
+        (result, prefix)
+    } else {
+        (Ok(()), None)
+    };
+    if let Err(err) = pre_sampling_result {
+        // Turn preparation runs before input is recorded, so preserve it on failure.
         run_hooks_and_record_inputs(
             &sess,
             &turn_context,
@@ -228,16 +245,12 @@ pub(crate) async fn run_turn(
             .await;
         // Publish the failure only after prompt hooks finish, so clients cannot react to
         // an error by steering follow-up input into a turn still preserving its prompt.
-        let message_prefix = match turn_context.provider.capabilities().remote_compaction {
-            RemoteCompactionSupport::V2 => Some("Error running remote compact task".to_string()),
-            RemoteCompactionSupport::Unsupported => None,
-        };
         sess.send_event(
             turn_context.as_ref(),
             EventMsg::Error(err.to_error_event(message_prefix)),
         )
         .await;
-        error!("Failed to run pre-sampling compact");
+        error!("Failed to prepare turn");
         return Ok(None);
     }
 
@@ -1408,13 +1421,6 @@ async fn run_pre_sampling_compact(
     client_session: &mut ModelClientSession,
     cancellation_token: &CancellationToken,
 ) -> CodexResult<()> {
-    // Reject an unavailable explicit program before compaction can send an
-    // inference request using the previous turn's model and program.
-    cyber_access_program::for_auth(
-        sess.services.auth_manager.auth().await.as_ref(),
-        turn_context.cyber_access_program,
-        cyber_access_program::ApiKeyCyberAccessPrograms::from_config(&turn_context.config),
-    )?;
     maybe_run_previous_model_inline_compact(sess, turn_context, client_session, cancellation_token)
         .await?;
     let token_status =
