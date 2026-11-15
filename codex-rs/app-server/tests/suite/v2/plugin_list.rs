@@ -3856,7 +3856,12 @@ plugin_sharing = false
             )
             .exists()
     );
-    wait_for_remote_plugin_request_count(&server, "/bundles/private-linear.tar.gz", 0).await?;
+    wait_for_remote_plugin_request_count(
+        &server,
+        "/bundles/private-linear.tar.gz",
+        /*expected_count*/ 0,
+    )
+    .await?;
     wait_for_remote_installed_snapshot_request(&server).await?;
     Ok(())
 }

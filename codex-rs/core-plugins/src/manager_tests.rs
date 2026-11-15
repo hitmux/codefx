@@ -7532,7 +7532,7 @@ async fn account_changes_never_start_plugin_sync_even_with_remote_features_enabl
     let server = MockServer::start().await;
     let mut config = load_config(codex_home.path(), codex_home.path()).await;
     config.chatgpt_base_url = format!("{}/backend-api", server.uri());
-    let auth_manager = test_auth_manager(None);
+    let auth_manager = test_auth_manager(/*auth_mode*/ None);
     let manager = Arc::new(test_plugins_manager_with_auth_manager(
         codex_home.path().to_path_buf(),
         Some(Product::Codex),
@@ -7556,14 +7556,26 @@ async fn account_changes_never_start_plugin_sync_even_with_remote_features_enabl
         assert_eq!(loaded.effective_plugin_skill_roots().len(), 1);
         assert_eq!(fs::read(&plugin_skill).unwrap(), original_plugin_skill);
         let auth = auth_manager.auth_cached();
-        manager.maybe_start_curated_repo_sync_for_config(&config, None);
-        manager.maybe_start_remote_plugin_caches_refresh(&config, auth.clone(), true, None);
-        manager.maybe_start_remote_installed_plugin_bundle_sync(&config, auth, None);
+        manager.maybe_start_curated_repo_sync_for_config(
+            &config,
+            /*on_effective_plugins_changed*/ None,
+        );
+        manager.maybe_start_remote_plugin_caches_refresh(
+            &config,
+            auth.clone(),
+            /*prefetch_recommendations*/ true,
+            /*on_effective_plugins_changed*/ None,
+        );
+        manager.maybe_start_remote_installed_plugin_bundle_sync(
+            &config,
+            auth,
+            /*on_effective_plugins_changed*/ None,
+        );
         manager.maybe_start_plugin_startup_tasks_for_config(
             &config,
-            true,
+            /*prefetch_discovery*/ true,
             Arc::new(|| panic!("automatic marketplace upgrade must not reload config")),
-            None,
+            /*on_effective_plugins_changed*/ None,
             warnings.clone(),
         );
     }
