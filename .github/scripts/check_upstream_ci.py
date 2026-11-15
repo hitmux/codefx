@@ -77,8 +77,23 @@ def supported_linux_matrix_entry(match: re.Match[str]) -> str:
     entry = match.group()
     targets = re.findall(r"(?m)^            target: (.+)$", entry)
     if targets:
-        return entry if all(target in ("x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl") for target in targets) else ""
-    return entry if re.search(r"(?m)^          - (?:os|runner): ubuntu[^\n]*$|^            runner: ubuntu[^\n]*$", entry) and not re.search(r"ubuntu[^\n]*-arm", entry) else ""
+        return (
+            entry
+            if all(
+                target in ("x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl")
+                for target in targets
+            )
+            else ""
+        )
+    return (
+        entry
+        if re.search(
+            r"(?m)^          - (?:os|runner): ubuntu[^\n]*$|^            runner: ubuntu[^\n]*$",
+            entry,
+        )
+        and not re.search(r"ubuntu[^\n]*-arm", entry)
+        else ""
+    )
 
 
 def linux_projection(path: str, text: str) -> str:
@@ -345,12 +360,20 @@ def coverage_errors(root: Path) -> list[str]:
         if re.search(r"(?m)^\s*if: false|^    continue-on-error: true", text):
             errors.append(f"Coverage cannot ignore failure or be disabled: {path}")
     for name in (
-        "bazel.yml", "rust-ci.yml", "rust-ci-full.yml", "v8-canary.yml",
-        "codefx-source-smoke.yml", "codefx-platform-release.yml",
-        "codefx-native-smoke.yml", "codefx-publish-verified.yml",
+        "bazel.yml",
+        "rust-ci.yml",
+        "rust-ci-full.yml",
+        "v8-canary.yml",
+        "codefx-source-smoke.yml",
+        "codefx-platform-release.yml",
+        "codefx-native-smoke.yml",
+        "codefx-publish-verified.yml",
     ):
         text = comparable((root / ".github/workflows" / name).read_text())
-        if re.search(r"\b(?:target|targets):[^\n]*(?:aarch64|arm64|apple-darwin|windows)|\b(?:runner|runs-on|os):[^\n]*(?:-arm|macos|windows)", text):
+        if re.search(
+            r"\b(?:target|targets):[^\n]*(?:aarch64|arm64|apple-darwin|windows)|\b(?:runner|runs-on|os):[^\n]*(?:-arm|macos|windows)",
+            text,
+        ):
             errors.append(f"Only Linux amd64 targets and runners are supported: {name}")
     return errors
 

@@ -102,7 +102,9 @@ class LinuxProjection(unittest.TestCase):
             "          - os: windows-latest\n            target: x86_64-pc-windows-msvc\n"
             "    steps:\n      - run: bazel test //...\n"
         )
-        projected = policy.linux_projection(".github/workflows/rust-ci-full.yml", source)
+        projected = policy.linux_projection(
+            ".github/workflows/rust-ci-full.yml", source
+        )
         self.assertIn("target: x86_64-unknown-linux-gnu", projected)
         self.assertIn("target: x86_64-unknown-linux-musl", projected)
         self.assertIn("run: bazel test //...", projected)
@@ -264,12 +266,17 @@ class RequiredGate(unittest.TestCase):
     def test_unsupported_architectures_cannot_return_to_custom_matrices(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            shutil.copytree(policy.ROOT / ".github/workflows", root / ".github/workflows")
+            shutil.copytree(
+                policy.ROOT / ".github/workflows", root / ".github/workflows"
+            )
             self.assertEqual(policy.coverage_errors(root), [])
             for name in ("codefx-source-smoke.yml", "codefx-platform-release.yml"):
                 path = root / ".github/workflows" / name
                 original = path.read_text()
-                path.write_text(original + "\n          - runner: ubuntu-24.04-arm\n            target: aarch64-unknown-linux-musl\n")
+                path.write_text(
+                    original
+                    + "\n          - runner: ubuntu-24.04-arm\n            target: aarch64-unknown-linux-musl\n"
+                )
                 self.assertTrue(policy.coverage_errors(root))
                 path.write_text(original)
 
