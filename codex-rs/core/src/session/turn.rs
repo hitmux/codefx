@@ -202,8 +202,7 @@ pub(crate) async fn run_turn(
         turn_context.cyber_access_program,
         cyber_access_program::ApiKeyCyberAccessPrograms::from_config(&turn_context.config),
     )
-    .map(|_| ())
-    .map_err(Into::into);
+    .map(|_| ());
     // TODO(ccunningham): Pre-turn compaction runs before context updates and the
     // new user message are recorded. Estimate pending incoming items (context
     // diffs/full reinjection + user input) and trigger compaction preemptively

@@ -26,7 +26,7 @@ on:
       runtime_component:
         description: Runtime component to verify
         type: choice
-        options: [all, exec, shell, app-server, core, v8, budget]
+        options: [all, exec, shell, app-server, core, v8, budget, clippy]
         default: all
       sdk_regressions:
         description: Verify SDK child process lifecycle regressions
@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: ${{ fromJSON(inputs.runtime_component == 'shell' && '["shell"]' || inputs.runtime_component == 'exec' && '["exec"]' || inputs.runtime_component == 'app-server' && '["app-server"]' || inputs.runtime_component == 'core' && '["core"]' || inputs.runtime_component == 'v8' && '["v8"]' || inputs.runtime_component == 'budget' && '["budget"]' || '["exec","shell"]') }}
+        component: ${{ fromJSON(inputs.runtime_component == 'shell' && '["shell"]' || inputs.runtime_component == 'exec' && '["exec"]' || inputs.runtime_component == 'app-server' && '["app-server"]' || inputs.runtime_component == 'core' && '["core"]' || inputs.runtime_component == 'v8' && '["v8"]' || inputs.runtime_component == 'budget' && '["budget"]' || inputs.runtime_component == 'clippy' && '["clippy"]' || '["exec","shell"]') }}
     env:
       CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_CI_TEST_DEBUG: "0"
@@ -58,6 +58,8 @@ jobs:
       - uses: ./.github/actions/codefx-linux-voice-sdk
         if: matrix.component != 'shell' && matrix.component != 'v8'
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          components: clippy
       - uses: ./.github/actions/setup-rusty-v8
         if: matrix.component != 'shell'
         with:
@@ -121,6 +123,10 @@ jobs:
           cargo build --locked --profile ci-test --bin codex-linux-sandbox
           export CARGO_BIN_EXE_codex_linux_sandbox="$CARGO_TARGET_DIR/ci-test/codex-linux-sandbox"
           cargo nextest run --locked --cargo-profile ci-test -p codex-core --test all --no-fail-fast --test-threads 2 --retries 0 -E 'test(rollout_budget)'
+      - name: Verify full workspace Clippy including test targets
+        if: matrix.component == 'clippy'
+        working-directory: codex-rs
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
   plugin-regressions:
     if: github.event_name == 'workflow_dispatch' && inputs.plugin_regressions
     runs-on: ubuntu-24.04
