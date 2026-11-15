@@ -155,10 +155,11 @@ mod tests {
             let view = v8::Local::<v8::ArrayBufferView>::try_from(value).unwrap();
             // Empty views already have a backing buffer even when small nonempty
             // typed arrays can store their contents inline.
-            let on_heap = length > 0 && match v8::TYPED_ARRAY_MAX_SIZE_IN_HEAP {
-                0 => false,
-                max_size => length <= max_size,
-            };
+            let on_heap = length > 0
+                && match v8::TYPED_ARRAY_MAX_SIZE_IN_HEAP {
+                    0 => false,
+                    max_size => length <= max_size,
+                };
             // Check native placement before asking C++ to copy into storage:
             // stale size-zero bindings must fail here rather than abort in FFI.
             assert_eq!(view.has_buffer(), !on_heap, "byte length {length}");

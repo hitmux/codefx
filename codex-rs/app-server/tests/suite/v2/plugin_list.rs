@@ -1215,7 +1215,11 @@ async fn plugin_list_refreshes_plugins_from_each_cwd(
         })
         .collect::<Vec<_>>();
     for (name, source_version) in &expected_sources {
-        let version = if force_refetch { *source_version } else { "1.0.0" };
+        let version = if force_refetch {
+            *source_version
+        } else {
+            "1.0.0"
+        };
         let manifest = codex_home.path().join(format!(
             "plugins/cache/{name}/sample/{version}/.codex-plugin/plugin.json"
         ));
@@ -1959,8 +1963,7 @@ enabled = true
 }
 
 #[tokio::test]
-async fn app_server_startup_never_downloads_installed_plugin_bundles()
--> Result<()> {
+async fn app_server_startup_never_downloads_installed_plugin_bundles() -> Result<()> {
     let codex_home = TempDir::new()?;
     let server = MockServer::start().await;
     write_remote_plugin_catalog_config(
@@ -2025,10 +2028,17 @@ async fn app_server_startup_never_downloads_installed_plugin_bundles()
 
     sleep(Duration::from_millis(200)).await;
     assert!(!installed_path.exists());
-    assert!(server.received_requests().await.expect("wiremock records requests").iter().all(|request| {
-        !request.url.path().contains("/ps/plugins/")
-            && !request.url.path().starts_with("/bundles/")
-    }));
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("wiremock records requests")
+            .iter()
+            .all(|request| {
+                !request.url.path().contains("/ps/plugins/")
+                    && !request.url.path().starts_with("/bundles/")
+            })
+    );
     let config = std::fs::read_to_string(codex_home.path().join("config.toml"))?;
     assert!(!config.contains("linear@openai-curated-remote"));
     Ok(())
@@ -2122,9 +2132,14 @@ async fn plugin_list_never_upgrades_or_removes_remote_installed_plugin_bundles()
     assert!(!new_path.exists());
     assert!(old_path.join(".codex-plugin/plugin.json").is_file());
     assert!(stale_path.join("1.0.0/.codex-plugin/plugin.json").is_file());
-    assert!(server.received_requests().await.expect("wiremock records requests").iter().all(|request| {
-        !request.url.path().starts_with("/bundles/")
-    }));
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("wiremock records requests")
+            .iter()
+            .all(|request| { !request.url.path().starts_with("/bundles/") })
+    );
     let config = std::fs::read_to_string(codex_home.path().join("config.toml"))?;
     assert!(!config.contains("linear@openai-curated-remote"));
     Ok(())
@@ -2639,8 +2654,7 @@ async fn plugin_list_honors_global_remote_catalog_cache_ttl() -> Result<()> {
             force_refetch: true,
         })
         .await?;
-    let _: PluginListResponse =
-        timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
+    let _: PluginListResponse = timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
     wait_for_cached_remote_catalog_plugin_ids(codex_home.path(), &[refreshed_remote_plugin_id])
         .await?;
     sleep(Duration::from_millis(100)).await;
@@ -2650,8 +2664,7 @@ async fn plugin_list_honors_global_remote_catalog_cache_ttl() -> Result<()> {
 }
 
 #[tokio::test]
-async fn app_server_startup_preserves_cached_catalog_until_explicit_refetch()
--> Result<()> {
+async fn app_server_startup_preserves_cached_catalog_until_explicit_refetch() -> Result<()> {
     let codex_home = TempDir::new()?;
     let server = MockServer::start().await;
     write_remote_plugin_catalog_config(
@@ -3829,9 +3842,14 @@ plugin_sharing = false
             .collect::<Vec<_>>(),
         vec![("private-linear@created-by-me-remote", true, true)]
     );
-    assert!(!codex_home.path().join(
-        "plugins/cache/created-by-me-remote/private-linear/1.2.3/.codex-plugin/plugin.json",
-    ).exists());
+    assert!(
+        !codex_home
+            .path()
+            .join(
+                "plugins/cache/created-by-me-remote/private-linear/1.2.3/.codex-plugin/plugin.json",
+            )
+            .exists()
+    );
     wait_for_remote_plugin_request_count(&server, "/bundles/private-linear.tar.gz", 0).await?;
     wait_for_remote_installed_snapshot_request(&server).await?;
     Ok(())
@@ -3895,7 +3913,12 @@ trusted_hash = "sha256:unrelated"
 
     trigger_plugin_installed_sync(&mut mcp).await?;
     sleep(Duration::from_millis(200)).await;
-    assert!(!codex_home.path().join("plugins/cache/workspace-directory").exists());
+    assert!(
+        !codex_home
+            .path()
+            .join("plugins/cache/workspace-directory")
+            .exists()
+    );
     let config: toml::Value = toml::from_str(&std::fs::read_to_string(
         codex_home.path().join("config.toml"),
     )?)?;
@@ -3903,10 +3926,18 @@ trusted_hash = "sha256:unrelated"
     assert_eq!(states.len(), 2);
     assert_eq!(states[disabled_hook_key]["enabled"].as_bool(), Some(false));
     assert!(states[disabled_hook_key].get("trusted_hash").is_none());
-    assert_eq!(states[unrelated_hook_key]["trusted_hash"].as_str(), Some("sha256:unrelated"));
-    assert!(server.received_requests().await.expect("wiremock records requests").iter().all(|request| {
-        !request.url.path().starts_with("/bundles/")
-    }));
+    assert_eq!(
+        states[unrelated_hook_key]["trusted_hash"].as_str(),
+        Some("sha256:unrelated")
+    );
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("wiremock records requests")
+            .iter()
+            .all(|request| { !request.url.path().starts_with("/bundles/") })
+    );
     Ok(())
 }
 
@@ -3955,11 +3986,21 @@ async fn plugin_installed_does_not_mutate_read_only_hook_config() -> Result<()> 
 
     trigger_plugin_installed_sync(&mut mcp).await?;
     sleep(Duration::from_millis(200)).await;
-    assert!(!codex_home.path().join("plugins/cache/workspace-directory").exists());
+    assert!(
+        !codex_home
+            .path()
+            .join("plugins/cache/workspace-directory")
+            .exists()
+    );
     assert!(!std::fs::read_to_string(config_target)?.contains("trusted_hash"));
-    assert!(server.received_requests().await.expect("wiremock records requests").iter().all(|request| {
-        !request.url.path().starts_with("/bundles/")
-    }));
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("wiremock records requests")
+            .iter()
+            .all(|request| { !request.url.path().starts_with("/bundles/") })
+    );
     Ok(())
 }
 
@@ -4112,11 +4153,16 @@ async fn plugin_list_fetches_workspace_directory_kind_when_remote_plugin_disable
     );
 
     wait_for_remote_plugin_list_scope_request_count(
-        &server, "WORKSPACE", /*expected_count*/ 0,
-    ).await?;
+        &server,
+        "WORKSPACE",
+        /*expected_count*/ 0,
+    )
+    .await?;
     wait_for_cached_remote_catalog_plugin_ids(
-        codex_home.path(), &["plugins~Plugin_11111111111111111111111111111111"],
-    ).await?;
+        codex_home.path(),
+        &["plugins~Plugin_11111111111111111111111111111111"],
+    )
+    .await?;
 
     let request_id = mcp
         .send_plugin_list_request(PluginListParams {
@@ -5146,10 +5192,6 @@ async fn trigger_plugin_installed_sync(mcp: &mut TestAppServer) -> Result<()> {
         timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
     Ok(())
 }
-
-
-
-
 
 async fn mount_remote_plugin_list(server: &MockServer, scope: &str, body: &str) {
     Mock::given(method("GET"))

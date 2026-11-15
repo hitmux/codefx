@@ -221,7 +221,10 @@ async fn nested_apply_patch_alias_works_with_restricted_reads() -> anyhow::Resul
     // The generated executable aliases live below CODEX_HOME. Permit only that
     // helper directory while keeping credentials and the sentinel unreadable.
     let aliases = serde_json::to_string(
-        &test.home_path().join("tmp").join(format!("arg0-{}", std::env::consts::OS)),
+        &test
+            .home_path()
+            .join("tmp")
+            .join(format!("arg0-{}", std::env::consts::OS)),
     )?;
     fs::write(
         test.home_path().join("config.toml"),
