@@ -36,9 +36,13 @@ fn openai_transport_budgets_load_without_allowing_provider_replacement() -> anyh
         "env_key = 'OTHER_KEY'",
         "supports_websockets = true",
     ] {
-        assert!(toml::from_str::<crate::config_toml::ConfigToml>(&format!(
-            "[model_providers.openai]\nrequest_max_retries = 0\n{replacement}"
-        )).is_err(), "transport overrides must not allow {replacement}");
+        assert!(
+            toml::from_str::<crate::config_toml::ConfigToml>(&format!(
+                "[model_providers.openai]\nrequest_max_retries = 0\n{replacement}"
+            ))
+            .is_err(),
+            "transport overrides must not allow {replacement}"
+        );
     }
     Ok(())
 }
