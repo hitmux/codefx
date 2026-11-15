@@ -325,7 +325,7 @@ async fn api_key_cyber_access_program_server_rejection_does_not_fall_back() -> R
     set_api_key_cyber_access_programs(&mut app, /*enabled*/ true).await?;
     let thread = app
         .start_thread(ThreadStartParams {
-            config: Some(BTreeMap::from([
+            config: Some(std::collections::HashMap::from([
                 (
                     "model_providers.openai.request_max_retries".to_owned(),
                     json!(0),
