@@ -67,8 +67,10 @@ LINUX_RUNTIME_EXPORT = """            cp "${CARGO_TARGET_DIR}/${CODEX_CI_TARGET}
             printf '%s  bwrap\\n' "$CODEX_BWRAP_SHA256" > "${helper_dir}/bwrap.sha256"
 """
 LINUX_RUNTIME_RESTORE = """            (cd "$helper_dir" && sha256sum --check bwrap.sha256)
+            install -Dm755 "$helper_dir/bwrap" "$helper_target_dir/bwrap"
             install -Dm755 "$helper_dir/bwrap" "$helper_target_dir/codex-resources/bwrap"
 """
+LINUX_RUNTIME_ENV = '              "CARGO_BIN_EXE_bwrap=${helper_target_dir}/bwrap"\n'
 
 SDK_PACKAGE_STEPS = '      - name: Download the same-run current source package\n        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1\n        with:\n          name: codefx-source-x86_64-unknown-linux-musl\n          path: ${{ runner.temp }}/sdk-package\n\n      - name: Verify candidate provenance and stage SDK executables\n        run: python3 scripts/install/prepare_sdk_package.py --directory "$RUNNER_TEMP/sdk-package" --output "$RUNNER_TEMP/sdk-runtime"\n\n      - name: Warm up the current source CLI\n        run: \'"${CODEX_EXEC_PATH}" --version\'\n\n'
 
@@ -201,6 +203,11 @@ def linux_projection(path: str, text: str) -> str:
             '            chmod +x "${helper_target_dir}/codex-linux-sandbox"\n'
         )
         text = text.replace(helper_chmod, helper_chmod + LINUX_RUNTIME_RESTORE)
+        text = text.replace(
+            '              "CARGO_BIN_EXE_codex_linux_sandbox=${sandbox_helper}"\n',
+            '              "CARGO_BIN_EXE_codex_linux_sandbox=${sandbox_helper}"\n'
+            + LINUX_RUNTIME_ENV,
+        )
     if name == "rust-ci-full-nextest-platform.yml":
         text = text.replace(
             "      SCCACHE_CACHE_SIZE: 10G",
