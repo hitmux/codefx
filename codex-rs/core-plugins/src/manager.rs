@@ -156,6 +156,11 @@ use tokio::sync::watch;
 use tracing::instrument;
 use tracing::warn;
 
+/// Codefx never changes local plugins or skills as a side effect of authentication,
+/// startup, discovery, or a client reconciliation request. Feature flags only opt
+/// into explicitly requested remote operations; they cannot enable background sync.
+pub const AUTOMATIC_PLUGIN_UPDATES_ENABLED: bool = false;
+
 static CURATED_REPO_SYNC_STARTED: AtomicBool = AtomicBool::new(false);
 const FEATURED_PLUGIN_IDS_CACHE_TTL: std::time::Duration =
     std::time::Duration::from_secs(60 * 60 * 3);
@@ -769,6 +774,10 @@ impl PluginsManager {
         config: &PluginsConfigInput,
         on_effective_plugins_changed: Option<EffectivePluginsChangedCallback>,
     ) {
+        if !AUTOMATIC_PLUGIN_UPDATES_ENABLED {
+            return;
+        }
+
         if config.plugins_enabled
             && !self.remote_global_catalog_active(config)
             && MarketplacePolicy::from_requirements(config.config_layer_stack.requirements())
@@ -1597,6 +1606,10 @@ impl PluginsManager {
         prefetch_recommendations: bool,
         on_effective_plugins_changed: Option<EffectivePluginsChangedCallback>,
     ) {
+        if !AUTOMATIC_PLUGIN_UPDATES_ENABLED {
+            return;
+        }
+
         self.maybe_start_remote_installed_plugins_cache_refresh_with_notify(
             config,
             auth.clone(),
@@ -1667,6 +1680,10 @@ impl PluginsManager {
         auth: Option<CodexAuth>,
         on_effective_plugins_changed: Option<EffectivePluginsChangedCallback>,
     ) {
+        if !AUTOMATIC_PLUGIN_UPDATES_ENABLED {
+            return;
+        }
+
         if !config.plugins_enabled {
             return;
         }
@@ -1854,6 +1871,10 @@ impl PluginsManager {
         scopes: BTreeSet<RemotePluginScope>,
         mode: RemoteCatalogCacheRefreshMode,
     ) {
+        if !AUTOMATIC_PLUGIN_UPDATES_ENABLED {
+            return;
+        }
+
         if !config.plugins_enabled || scopes.is_empty() {
             return;
         }
@@ -1873,6 +1894,10 @@ impl PluginsManager {
         options: PluginListBackgroundTaskOptions,
         on_effective_plugins_changed: Option<EffectivePluginsChangedCallback>,
     ) {
+        if !AUTOMATIC_PLUGIN_UPDATES_ENABLED {
+            return;
+        }
+
         self.maybe_start_non_curated_plugin_cache_refresh(context, &options.local_marketplaces);
         self.maybe_start_remote_catalog_cache_refresh(
             &context.global_config,
@@ -2890,6 +2915,10 @@ impl PluginsManager {
         on_effective_plugins_changed: Option<EffectivePluginsChangedCallback>,
         upgrade_warnings: mpsc::UnboundedSender<String>,
     ) {
+        if !AUTOMATIC_PLUGIN_UPDATES_ENABLED {
+            return;
+        }
+
         if config.plugins_enabled {
             self.maybe_start_curated_repo_sync_for_config(
                 config,
@@ -3108,6 +3137,10 @@ impl PluginsManager {
         context: &PluginMarketplaceContext,
         marketplaces: &[ConfiguredMarketplace],
     ) {
+        if !AUTOMATIC_PLUGIN_UPDATES_ENABLED {
+            return;
+        }
+
         if let Some(request) = context.non_curated_cache_refresh_request(
             self,
             marketplaces,

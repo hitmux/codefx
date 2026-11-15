@@ -18,6 +18,11 @@ impl PluginRequestProcessor {
         config_processor: ConfigRequestProcessor,
         request_serialization_queues: &RequestSerializationQueues,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        // Clients can send this automatically after login, even when all three
+        // remote feature flags are enabled. It must never mutate Codefx's local state.
+        if !codex_core_plugins::AUTOMATIC_PLUGIN_UPDATES_ENABLED {
+            return Ok(Some(PluginReconcileResponse::default().into()));
+        }
         let config = self.load_latest_config(/*fallback_cwd*/ None).await?;
         let plugins_input = config.plugins_config_input();
         let auth = self.auth_manager.auth().await;

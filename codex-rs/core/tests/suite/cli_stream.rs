@@ -71,7 +71,8 @@ async fn mount_personal_access_token_startup(server: &MockServer) {
 fn personal_access_token_exec_command(server: &MockServer, home: &TempDir) -> Command {
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
-    cmd.arg("--no-daemon").arg("exec")
+    cmd.arg("--no-daemon")
+        .arg("exec")
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(format!("openai_base_url=\"{}/api/codex\"", server.uri()))
@@ -230,7 +231,8 @@ async fn responses_mode_stream_cli() {
     );
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
-    cmd.arg("--no-daemon").arg("exec")
+    cmd.arg("--no-daemon")
+        .arg("exec")
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(&provider_override)
@@ -272,7 +274,8 @@ async fn responses_mode_stream_cli_supports_openai_base_url_config_override() {
     let home = TempDir::new().unwrap();
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
-    cmd.arg("--no-daemon").arg("exec")
+    cmd.arg("--no-daemon")
+        .arg("exec")
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
@@ -324,7 +327,8 @@ async fn exec_cli_applies_model_instructions_file() {
     let repo_root = repo_root();
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
-    cmd.arg("--no-daemon").arg("exec")
+    cmd.arg("--no-daemon")
+        .arg("exec")
         .arg("--skip-git-repo-check")
         .arg("--model")
         .arg("gpt-5.5")
@@ -391,7 +395,8 @@ async fn exec_cli_profile_applies_model_instructions_file() {
     let repo_root = repo_root();
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
-    cmd.arg("--no-daemon").arg("exec")
+    cmd.arg("--no-daemon")
+        .arg("exec")
         .arg("--skip-git-repo-check")
         .arg("--model")
         .arg("gpt-5.5")
@@ -433,7 +438,8 @@ async fn responses_api_stream_cli() {
     let home = TempDir::new().unwrap();
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
-    cmd.arg("--no-daemon").arg("exec")
+    cmd.arg("--no-daemon")
+        .arg("exec")
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
@@ -474,7 +480,8 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
     // 4. Run the codex CLI and invoke `exec`, which is what records a session.
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
-    cmd.arg("--no-daemon").arg("exec")
+    cmd.arg("--no-daemon")
+        .arg("exec")
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
@@ -590,7 +597,8 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
     let prompt2 = format!("echo {marker2}");
     let bin2 = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd2 = Command::new(bin2);
-    cmd2.arg("--no-daemon").arg("exec")
+    cmd2.arg("--no-daemon")
+        .arg("exec")
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
