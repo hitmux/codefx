@@ -60,6 +60,11 @@ jobs:
           export CODEX_BWRAP_SHA256="$(sha256sum "$sandbox" | cut -d ' ' -f 1)"
           cargo build --locked --release --target "$TARGET" \
             --bin codex --bin codex-code-mode-host --bin codex-exec-server
+      - name: Verify V8 ABI on the native musl runner
+        working-directory: codex-rs
+        run: |
+          cargo test --locked --release --target "$TARGET" -p codex-v8-poc --lib \
+            -- --test-threads=1
       - name: Confirm native architecture and musl linkage
         shell: bash
         run: |

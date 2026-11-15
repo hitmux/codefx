@@ -31,7 +31,8 @@ packages never substitute for the candidate.
 - Dependency/security policy, repository/architecture checks, spelling and size.
 - Installer transaction, rollback and failure tests.
 - Current-source x86_64/ARM64 musl release-configuration builds, native ELF/ABI
-  checks, package validation, actual installation and reinstallation.
+  checks including execution of the V8 ABI probe on each native runner, package
+  validation, actual installation and reinstallation.
 
 Every required dependency must succeed. Failure, cancellation, an unexpected
 skip or a disconnected producer fails the aggregate. SDK waits for source-package
