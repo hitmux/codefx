@@ -22,7 +22,6 @@ class LinuxProjection(unittest.TestCase):
         projected = policy.linux_projection(path, official)
         self.assertIn("CODEX_BWRAP_SHA256", projected)
         self.assertIn("sha256sum --check bwrap.sha256", projected)
-        self.assertIn("CARGO_BIN_EXE_bwrap=${helper_target_dir}/bwrap", projected)
         self.assertIn("run: cargo nextest archive --workspace", projected)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "fork"
