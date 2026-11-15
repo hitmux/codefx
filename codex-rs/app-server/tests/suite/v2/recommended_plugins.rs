@@ -37,12 +37,12 @@ enum ToolSuggestFeature {
 }
 
 #[tokio::test]
-async fn first_turn_after_external_login_waits_for_recommended_plugins() -> Result<()> {
+async fn first_turn_after_external_login_does_not_prefetch_recommended_plugins() -> Result<()> {
     recommended_plugins_after_external_login(ToolSuggestFeature::Enabled).await
 }
 
 #[tokio::test]
-async fn first_turn_after_external_login_waits_for_recommended_plugins_without_tool_suggest()
+async fn first_turn_after_external_login_does_not_prefetch_recommended_plugins_without_tool_suggest()
 -> Result<()> {
     recommended_plugins_after_external_login(ToolSuggestFeature::Disabled).await
 }
@@ -73,7 +73,7 @@ async fn recommended_plugins_after_external_login(
                     }]
                 })),
         )
-        .expect(1)
+        .expect(0)
         .mount(&server)
         .await;
     let response = responses::sse(vec![
@@ -94,7 +94,7 @@ async fn recommended_plugins_after_external_login(
     std::fs::write(
         config_path,
         format!(
-            "{config}\n[features]\napps = true\nplugins = true\ntool_suggest = {tool_suggest_enabled}\n{recommended_plugins_config}"
+            "{config}\n[features]\napps = true\nplugins = true\nremote_plugin = true\nplugin_sharing = true\ntool_suggest = {tool_suggest_enabled}\n{recommended_plugins_config}"
         ),
     )?;
 
@@ -130,8 +130,8 @@ async fn recommended_plugins_after_external_login(
         LoginAccountResponse::ChatgptAuthTokens {}
     );
 
-    // Login clears the recommendation cache after its RPC response. Wait for completion so
-    // thread startup and the background refresh share the same cache generation.
+    // Wait for login completion before verifying the first turn stays independent
+    // of remote plugin prefetch, even with the remote features explicitly enabled.
     let notification = timeout(
         DEFAULT_READ_TIMEOUT,
         app_server.read_stream_until_notification_message("account/login/completed"),
@@ -199,15 +199,10 @@ async fn recommended_plugins_after_external_login(
         .into_iter()
         .filter(|text| text.starts_with("<recommended_plugins>"))
         .collect::<Vec<_>>();
-    assert_eq!(
-        recommendations,
-        vec![concat!(
-            "<recommended_plugins>\n",
-            "Here is a list of plugins that are available but not installed.\n\n",
-            "- GitHub (github@openai-curated-remote)\n",
-            "</recommended_plugins>",
-        )]
-    );
+    assert!(recommendations.is_empty(), "login must not prefetch remote recommendations");
+    assert!(server.received_requests().await.expect("requests").iter().all(|request| {
+        !request.url.path().contains("/ps/plugins/")
+    }));
     let body = request.body_json();
     let tool_names = body
         .get("tools")

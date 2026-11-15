@@ -104,7 +104,7 @@ jobs:
         run: |
           cargo build --locked --profile ci-test --bin codex-app-server --bin codex-linux-sandbox --bin codex-code-mode-host --bin test_stdio_server
           export CARGO_BIN_EXE_codex_linux_sandbox="$CARGO_TARGET_DIR/ci-test/codex-linux-sandbox"
-          cargo nextest run --locked --cargo-profile ci-test -p codex-app-server --no-fail-fast --test-threads 2 --retries 0 -E 'test(suite::v2::plugin_) | test(curated_mcp_sync) | test(marketplace_upgrade) | test(plugin_metadata_refresh) | test(marketplace_upgrade_refreshes_hook_runtime) | test(suite::v2::cyber_access_program)'
+          cargo nextest run --locked --cargo-profile ci-test -p codex-app-server --no-fail-fast --test-threads 2 --retries 0 -E 'test(suite::v2::plugin_) | test(curated_mcp_sync) | test(marketplace_upgrade) | test(plugin_metadata_refresh) | test(marketplace_upgrade_refreshes_hook_runtime) | test(suite::v2::cyber_access_program) | test(recommended_plugins) | test(suite::v2::skills_list) | test(turn_cost_otel)'
       - name: Verify core inference and local plugin regressions
         if: matrix.component == 'core'
         working-directory: codex-rs

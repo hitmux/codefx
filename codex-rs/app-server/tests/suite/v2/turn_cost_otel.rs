@@ -94,6 +94,9 @@ approval_policy = "never"
 responses_websockets = false
 responses_websockets_v2 = false
 runtime_metrics = true
+[model_providers.openai]
+request_max_retries = 0
+stream_max_retries = 0
 [analytics]
 enabled = true
 [otel]
@@ -172,7 +175,7 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
     })
     .await?;
     wait_for_cost_queries(&server, /*count*/ 1).await;
-    let response = client
+    let response = timeout(Duration::from_secs(20), client
         .request(ClientRequest::ThreadStart {
             request_id: RequestId::Integer(1),
             params: ThreadStartParams {
@@ -183,11 +186,11 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
                 }]),
                 ..Default::default()
             },
-        })
-        .await?
+        }))
+        .await??
         .expect("thread/start");
     let ThreadStartResponse { thread, .. } = serde_json::from_value(response)?;
-    let response = client
+    let response = timeout(Duration::from_secs(20), client
         .request(ClientRequest::TurnStart {
             request_id: RequestId::Integer(2),
             params: TurnStartParams {
@@ -198,11 +201,11 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
                 }],
                 ..Default::default()
             },
-        })
-        .await?
+        }))
+        .await??
         .expect("turn/start");
     let TurnStartResponse { turn } = serde_json::from_value(response)?;
-    timeout(Duration::from_secs(/*secs*/ 90), async {
+    timeout(Duration::from_secs(/*secs*/ 20), async {
         while let Some(event) = client.next_event().await {
             if let InProcessServerEvent::ServerNotification(event) = event
                 && let ServerNotification::TurnCompleted(event) = *event

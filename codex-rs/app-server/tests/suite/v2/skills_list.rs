@@ -18,8 +18,6 @@ use codex_app_server_protocol::ExperimentalFeatureEnablementSetResponse;
 use codex_app_server_protocol::MergeStrategy;
 use codex_app_server_protocol::PermissionProfileListParams;
 use codex_app_server_protocol::PermissionProfileListResponse;
-use codex_app_server_protocol::PluginListParams;
-use codex_app_server_protocol::PluginListResponse;
 use codex_app_server_protocol::SkillScope;
 use codex_app_server_protocol::SkillsChangedNotification;
 use codex_app_server_protocol::SkillsExtraRootsSetParams;
@@ -43,14 +41,7 @@ use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use test_case::test_case;
 use tokio::time::timeout;
-use wiremock::Mock;
 use wiremock::MockServer;
-use wiremock::ResponseTemplate;
-use wiremock::matchers::header;
-use wiremock::matchers::method;
-use wiremock::matchers::path;
-use wiremock::matchers::query_param;
-use wiremock::matchers::query_param_is_missing;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 const WATCHER_TIMEOUT: Duration = Duration::from_secs(20);
@@ -365,7 +356,7 @@ async fn skills_list_runtime_enable_refreshes_shared_system_skill_cache() -> Res
 }
 
 #[tokio::test]
-async fn runtime_remote_plugin_toggle_updates_local_curated_plugin_skills() -> Result<()> {
+async fn runtime_remote_plugin_toggle_preserves_local_curated_plugin_skills() -> Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
     let server = MockServer::start().await;
@@ -472,26 +463,31 @@ enabled = true
     let SkillsListResponse { data } =
         timeout(DEFAULT_TIMEOUT, mcp.read_response(skills_list_request_id)).await??;
 
-    assert!(data.iter().all(|entry| {
-        entry
-            .skills
-            .iter()
-            .all(|skill| skill.name != "google-calendar:meeting-prep")
+    assert!(data.iter().any(|entry| {
+        entry.skills.iter().any(|skill| {
+            skill.name == "google-calendar:meeting-prep"
+                && skill.description == "Updated meeting preparation"
+        })
     }));
     Ok(())
 }
 
 #[tokio::test]
-async fn skills_list_loads_remote_installed_plugin_skills_from_cache() -> Result<()> {
+async fn skills_list_preserves_configured_cached_plugin_without_account_sync() -> Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
     let server = MockServer::start().await;
     let expected_skill_path =
         std::fs::canonicalize(write_cached_remote_plugin_with_skill(codex_home.path())?)?;
+    let original_skill = std::fs::read(&expected_skill_path)?;
     write_plugins_enabled_config_with_base_url(
         codex_home.path(),
         &format!("{}/backend-api/", server.uri()),
     )?;
+    let config_path = codex_home.path().join("config.toml");
+    let config = std::fs::read_to_string(&config_path)?;
+    std::fs::write(&config_path, format!("{config}remote_plugin = true\nplugin_sharing = true\napps = true\n\n[plugins.\"linear@openai-curated-remote\"]\nenabled = true\n"))?;
+    let original_config = std::fs::read(&config_path)?;
     write_chatgpt_auth(
         codex_home.path(),
         ChatGptAuthFixture::new("chatgpt-token")
@@ -500,172 +496,32 @@ async fn skills_list_loads_remote_installed_plugin_skills_from_cache() -> Result
             .chatgpt_account_id("account-123"),
         AuthCredentialsStoreMode::File,
     )?;
-
-    let global_directory_body = r#"{
-  "plugins": [
-    {
-      "id": "plugins~Plugin_linear",
-      "name": "linear",
-      "scope": "GLOBAL",
-      "installation_policy": "AVAILABLE",
-      "authentication_policy": "ON_USE",
-      "release": {
-        "display_name": "Linear",
-        "description": "Track work in Linear",
-        "app_ids": [],
-        "interface": {},
-        "skills": []
-      }
-    }
-  ],
-  "pagination": {
-    "limit": 50,
-    "next_page_token": null
-  }
-}"#;
-    let global_installed_body = r#"{
-  "plugins": [
-    {
-      "id": "plugins~Plugin_linear",
-      "name": "linear",
-      "scope": "GLOBAL",
-      "installation_policy": "AVAILABLE",
-      "authentication_policy": "ON_USE",
-      "release": {
-        "display_name": "Linear",
-        "description": "Track work in Linear",
-        "app_ids": [],
-        "interface": {},
-        "skills": []
-      },
-      "enabled": true,
-      "disabled_skill_names": []
-    }
-  ],
-  "pagination": {
-    "limit": 50,
-    "next_page_token": null
-  }
-}"#;
-    let empty_page_body = r#"{
-  "plugins": [],
-  "pagination": {
-    "limit": 50,
-    "next_page_token": null
-  }
-}"#;
-
-    for (scope, body) in [
-        ("GLOBAL", global_directory_body),
-        ("WORKSPACE", empty_page_body),
-    ] {
-        Mock::given(method("GET"))
-            .and(path("/backend-api/ps/plugins/list"))
-            .and(query_param("scope", scope))
-            .and(query_param("limit", "200"))
-            .and(header("authorization", "Bearer chatgpt-token"))
-            .and(header("chatgpt-account-id", "account-123"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(body))
-            .mount(&server)
-            .await;
-    }
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .without_auto_env()
         .build_initialized_with_timeout(DEFAULT_TIMEOUT)
         .await?;
-
-    let stale_skills_list_request_id = mcp
-        .send_skills_list_request(SkillsListParams {
+    for force_reload in [true, false, true] {
+        let request_id = mcp.send_skills_list_request(SkillsListParams {
             cwds: vec![cwd.path().to_path_buf()],
-            force_reload: true,
-        })
-        .await?;
-    let SkillsListResponse { data } = timeout(
-        DEFAULT_TIMEOUT,
-        mcp.read_response(stale_skills_list_request_id),
-    )
-    .await??;
-    assert_eq!(data.len(), 1);
-    assert!(
-        data[0]
-            .skills
-            .iter()
-            .all(|skill| skill.name != "linear:triage-issues"),
-        "remote installed plugin cache has not been refreshed yet"
-    );
-
-    for (scope, body) in [
-        ("GLOBAL", global_installed_body),
-        ("USER", empty_page_body),
-        ("WORKSPACE", empty_page_body),
-    ] {
-        Mock::given(method("GET"))
-            .and(path("/backend-api/ps/plugins/installed"))
-            .and(query_param("scope", scope))
-            .and(header("authorization", "Bearer chatgpt-token"))
-            .and(header("chatgpt-account-id", "account-123"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(body))
-            .mount(&server)
-            .await;
+            force_reload,
+        }).await?;
+        let SkillsListResponse { data } = timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
+        assert_eq!(data.len(), 1);
+        assert_eq!(data[0].errors, Vec::new());
+        let skill = data[0].skills.iter().find(|skill| skill.name == "linear:triage-issues")
+            .expect("configured cached plugin remains available without remote refresh");
+        assert_eq!(std::fs::canonicalize(skill.path.as_str())?, expected_skill_path);
+        assert_eq!((skill.enabled, skill.plugin_id.as_deref()), (true, Some("linear@openai-curated-remote")));
+        let request_id = mcp.send_raw_request("plugin/reconcile", Some(serde_json::json!({}))).await?;
+        let response: codex_app_server_protocol::PluginReconcileResponse = timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
+        assert_eq!(response, codex_app_server_protocol::PluginReconcileResponse::default());
     }
-    Mock::given(method("GET"))
-        .and(path("/backend-api/ps/plugins/installed"))
-        .and(query_param_is_missing("scope"))
-        .and(header("authorization", "Bearer chatgpt-token"))
-        .and(header("chatgpt-account-id", "account-123"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(global_installed_body))
-        .mount(&server)
-        .await;
-
-    let plugin_list_request_id = mcp
-        .send_plugin_list_request(PluginListParams {
-            cwds: None,
-            marketplace_kinds: None,
-            force_refetch: false,
-        })
-        .await?;
-    let _: PluginListResponse =
-        timeout(DEFAULT_TIMEOUT, mcp.read_response(plugin_list_request_id)).await??;
-
-    let SkillsListResponse { data } = timeout(DEFAULT_TIMEOUT, async {
-        loop {
-            let skills_list_request_id = mcp
-                .send_skills_list_request(SkillsListParams {
-                    cwds: vec![cwd.path().to_path_buf()],
-                    force_reload: false,
-                })
-                .await?;
-            let response: SkillsListResponse =
-                timeout(DEFAULT_TIMEOUT, mcp.read_response(skills_list_request_id)).await??;
-            if response.data.iter().any(|entry| {
-                entry
-                    .skills
-                    .iter()
-                    .any(|skill| skill.name == "linear:triage-issues")
-            }) {
-                break Ok::<SkillsListResponse, anyhow::Error>(response);
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await??;
-
-    assert_eq!(data.len(), 1);
-    assert_eq!(data[0].errors, Vec::new());
-    let skill = data[0]
-        .skills
-        .iter()
-        .find(|skill| skill.name == "linear:triage-issues")
-        .expect("expected skill from cached remote plugin");
-    assert_eq!(
-        std::fs::canonicalize(skill.path.as_str())?,
-        expected_skill_path
-    );
-    assert_eq!(
-        (skill.enabled, skill.plugin_id.as_deref()),
-        (true, Some("linear@openai-curated-remote")),
-    );
+    assert_eq!(std::fs::read(&expected_skill_path)?, original_skill);
+    assert_eq!(std::fs::read(&config_path)?, original_config);
+    assert!(server.received_requests().await.expect("requests").iter().all(|request| {
+        !request.url.path().contains("/ps/plugins/") && request.url.path() != "/bundle"
+    }));
     Ok(())
 }
 
