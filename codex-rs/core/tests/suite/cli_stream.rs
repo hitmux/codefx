@@ -119,6 +119,8 @@ impl Drop for ChildProcessCleanupGuard {
 // can spawn shell/Python grandchildren, so the timeout path must reap the whole
 // process group instead of only the direct CLI child.
 fn run_cli_command(command: &mut Command) -> io::Result<Output> {
+    // These fixtures test response streaming, not live API-key catalog discovery.
+    command.args(["-c", "features.api_key_model_discovery=false"]);
     #[cfg(unix)]
     command.process_group(0);
 
@@ -137,7 +139,17 @@ fn run_cli_command(command: &mut Command) -> io::Result<Output> {
     match receiver.recv_timeout(CLI_TIMEOUT) {
         Ok(output) => output,
         Err(mpsc::RecvTimeoutError::Timeout) => {
-            Err(io::Error::new(io::ErrorKind::TimedOut, "process timed out"))
+            drop(_cleanup);
+            let diagnostic = receiver
+                .recv_timeout(Duration::from_secs(5))
+                .ok()
+                .and_then(Result::ok)
+                .map(|output| String::from_utf8_lossy(&output.stderr).into_owned())
+                .unwrap_or_default();
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("process timed out; stderr:\n{diagnostic}"),
+            ))
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => {
             Err(io::Error::other("process output reader thread exited"))
@@ -149,7 +161,7 @@ fn run_cli_command(command: &mut Command) -> io::Result<Output> {
 async fn responses_mode_stream_cli_supports_personal_access_tokens() {
     skip_if_no_network!();
 
-    let server = MockServer::start().await;
+    let server = responses::start_mock_server().await;
     mount_personal_access_token_startup(&server).await;
     let resp_mock = responses::mount_sse_once(&server, cli_sse_response()).await;
     let home = TempDir::new().unwrap();
@@ -181,7 +193,7 @@ async fn responses_mode_stream_cli_does_not_attempt_oauth_refresh_for_personal_a
  {
     skip_if_no_network!();
 
-    let server = MockServer::start().await;
+    let server = responses::start_mock_server().await;
     mount_personal_access_token_startup(&server).await;
     Mock::given(method("POST"))
         .and(path("/api/codex/responses"))
@@ -215,7 +227,7 @@ async fn responses_mode_stream_cli_does_not_attempt_oauth_refresh_for_personal_a
 async fn responses_mode_stream_cli() {
     skip_if_no_network!();
 
-    let server = MockServer::start().await;
+    let server = responses::start_mock_server().await;
     let repo_root = repo_root();
     let sse = responses::sse(vec![
         responses::ev_response_created("resp-1"),
@@ -262,7 +274,7 @@ async fn responses_mode_stream_cli() {
 async fn responses_mode_stream_cli_supports_openai_base_url_config_override() {
     skip_if_no_network!();
 
-    let server = MockServer::start().await;
+    let server = responses::start_mock_server().await;
     let repo_root = repo_root();
     let sse = responses::sse(vec![
         responses::ev_response_created("resp-1"),
@@ -301,7 +313,7 @@ async fn exec_cli_applies_model_instructions_file() {
 
     // Start mock server which will capture the request and return a minimal
     // SSE stream for a single turn.
-    let server = MockServer::start().await;
+    let server = responses::start_mock_server().await;
     let sse = concat!(
         "data: {\"type\":\"response.created\",\"response\":{}}\n\n",
         "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r1\"}}\n\n"
@@ -367,7 +379,7 @@ async fn exec_cli_applies_model_instructions_file() {
 async fn exec_cli_profile_applies_model_instructions_file() {
     skip_if_no_network!();
 
-    let server = MockServer::start().await;
+    let server = responses::start_mock_server().await;
     let sse = concat!(
         "data: {\"type\":\"response.created\",\"response\":{}}\n\n",
         "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r1\"}}\n\n"
@@ -431,7 +443,7 @@ async fn exec_cli_profile_applies_model_instructions_file() {
 async fn responses_api_stream_cli() {
     skip_if_no_network!();
 
-    let server = MockServer::start().await;
+    let server = responses::start_mock_server().await;
     let resp_mock = responses::mount_sse_once(&server, cli_sse_response()).await;
     let repo_root = repo_root();
 
@@ -472,7 +484,7 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
     let prompt = format!("echo {marker}");
 
     // 3. Serve two hermetic SSE responses, one for the initial run and one for resume.
-    let server = MockServer::start().await;
+    let server = responses::start_mock_server().await;
     let resp_mock =
         responses::mount_sse_sequence(&server, vec![cli_sse_response(), cli_sse_response()]).await;
     let repo_root = repo_root();

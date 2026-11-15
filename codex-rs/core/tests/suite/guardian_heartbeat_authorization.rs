@@ -7,6 +7,34 @@ use codex_protocol::turn_input::TurnStartOptions;
 use core_test_support::responses::mount_sse_once;
 use pretty_assertions::assert_eq;
 
+async fn mount_worker_completion_notice(server: &wiremock::MockServer, root_id: ThreadId) {
+    // Completion can reach an idle root or steer its next user turn. Either case
+    // can require one more sampling request after the explicit fixture response.
+    mount_sse_once_match(
+        server,
+        move |request: &wiremock::Request| {
+            is_root_request(request, root_id)
+                && request_body(request).is_some_and(|body| {
+                    body["input"].as_array().is_some_and(|items| {
+                        items.iter().any(|item| {
+                            item["type"] == "agent_message"
+                                && item["recipient"] == "/root"
+                                && item["content"].as_array().is_some_and(|content| {
+                                    content.iter().any(|part| {
+                                        part["text"].as_str().is_some_and(|text| {
+                                            text.starts_with("Message Type: FINAL_ANSWER")
+                                        })
+                                    })
+                                })
+                        })
+                    })
+                })
+        },
+        sse(vec![ev_completed("worker-notice-acknowledged")]),
+    )
+    .await;
+}
+
 #[test_case::test_case(0, None; "below_storage_limits")]
 #[test_case::test_case(18, None; "bounded_user_history")]
 #[test_case::test_case(0, Some("Should I pause restarting until you give final approval?"); "filtered_assistant_question")]
@@ -34,6 +62,7 @@ async fn heartbeat_keeps_user_restriction_after_status_questions(
         .build_with_auto_env(&server)
         .await?;
     let root_id = test.session_configured.thread_id;
+    mount_worker_completion_notice(&server, root_id).await;
     let mut created = test.thread_manager.subscribe_thread_created();
     mount_sse_once(
         &server,
@@ -208,6 +237,7 @@ async fn heartbeat_root_projection_uses_latest_turn_skills(
         .build_with_auto_env(&server)
         .await?;
     let root_id = test.session_configured.thread_id;
+    mount_worker_completion_notice(&server, root_id).await;
     let mut created = test.thread_manager.subscribe_thread_created();
     let evidence = test
         .codex

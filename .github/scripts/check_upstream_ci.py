@@ -168,6 +168,21 @@ def linux_projection(path: str, text: str) -> str:
             "        with:\n          rust-version:",
         )
     if name == "blob-size-policy.yml":
+        # Manual validation has no push.before SHA. Inspect the branch's full
+        # divergence from the default branch instead of passing an empty base.
+        text = text.replace(
+            "        id: range\n",
+            "        id: range\n"
+            "        env:\n"
+            "          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}\n",
+        )
+        text = text.replace(
+            "          else\n            base='${{ github.event.before }}'",
+            '          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then\n'
+            "            head='${{ github.sha }}'\n"
+            '            base="$(git merge-base "origin/$DEFAULT_BRANCH" "$head")"\n'
+            "          else\n            base='${{ github.event.before }}'",
+        )
         text = text.replace(
             "      - uses: openai/fence@e017427978b91977d79a3023842166ab79b5b816 # pin@v0.12.2\n"
             "        with:\n          mode: audit\n",

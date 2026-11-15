@@ -249,6 +249,10 @@ async fn model_switch_program_pair(
                 } else if matches!(history, History::ApiKeyResume) {
                     config
                         .features
+                        .disable(Feature::ApiKeyModelDiscovery)
+                        .expect("disable API-key model discovery");
+                    config
+                        .features
                         .disable(Feature::ApiKeyCyberAccessPrograms)
                         .expect("disable API-key Cyber access programs");
                 }

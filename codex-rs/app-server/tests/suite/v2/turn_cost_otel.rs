@@ -48,6 +48,7 @@ use wiremock::matchers::path;
 const COST_PATH: &str = "/api/codex/usage/thread-estimates/query";
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn chatgpt_turn_cost_reaches_otlp_on_success() -> Result<()> {
     let server = MockServer::start().await;
     let collector = MockServer::start().await;
