@@ -220,7 +220,8 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
                 })
         },
         sse(vec![ev_completed("worker-notice-acknowledged")]),
-    ).await;
+    )
+    .await;
     mount_sse_once_match(
         &server,
         |request: &wiremock::Request| wire_request_contains(request, ROOT_PROMPT),
@@ -287,7 +288,9 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
         .await?;
 
     let mut created_threads = test.thread_manager.subscribe_thread_created();
-    timeout(Duration::from_secs(20), test.submit_turn(ROOT_PROMPT)).await.context("initial root turn did not complete")??;
+    timeout(Duration::from_secs(20), test.submit_turn(ROOT_PROMPT))
+        .await
+        .context("initial root turn did not complete")??;
     let child_thread_id = timeout(Duration::from_secs(10), created_threads.recv()).await??;
     let child_thread = test.thread_manager.get_thread(child_thread_id).await?;
     timeout(
@@ -296,8 +299,11 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
             matches!(event, EventMsg::TurnComplete(_))
         }),
     )
-    .await.context("budget worker did not complete")?;
-    timeout(Duration::from_secs(20), test.submit_turn(FOLLOW_UP_PROMPT)).await.context("budget follow-up did not complete")??;
+    .await
+    .context("budget worker did not complete")?;
+    timeout(Duration::from_secs(20), test.submit_turn(FOLLOW_UP_PROMPT))
+        .await
+        .context("budget follow-up did not complete")??;
 
     let requests = follow_up
         .requests()

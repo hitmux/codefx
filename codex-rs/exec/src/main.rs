@@ -49,7 +49,9 @@ fn parse_cli_from(
     // Clap's global append arguments otherwise retain only the deepest scope.
     top_cli.config_overrides = collect_config_overrides(TopCli::command(), args)?;
     let mut inner = top_cli.inner;
-    inner.config_overrides.prepend_root_overrides(top_cli.config_overrides);
+    inner
+        .config_overrides
+        .prepend_root_overrides(top_cli.config_overrides);
     Ok(inner)
 }
 
