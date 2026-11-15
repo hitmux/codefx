@@ -92,8 +92,9 @@ jobs:
         if: matrix.component == 'exec'
         working-directory: codex-rs
         run: |
-          cargo build --locked --profile ci-test -p codex-exec --bin codex-exec
-          cargo nextest run --locked --cargo-profile ci-test -p codex-exec --no-fail-fast --test-threads 2 --retries 0 -E 'test(suite::auth_env::exec_uses_codex_api_key_env_var) | test(suite::agents_md)'
+          cargo build --locked --profile ci-test --bin codex-exec --bin codex-linux-sandbox --bin codex-code-mode-host
+          export CARGO_BIN_EXE_codex_linux_sandbox="$CARGO_TARGET_DIR/ci-test/codex-linux-sandbox"
+          cargo nextest run --locked --cargo-profile ci-test -p codex-exec --no-fail-fast --test-threads 2 --retries 0
       - name: Verify account and plugin protocol regressions
         if: matrix.component == 'app-server'
         working-directory: codex-rs
