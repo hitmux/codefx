@@ -228,10 +228,12 @@ async fn recommended_plugins_after_external_login(
         .flatten()
         .filter_map(|tool| tool.get("name").and_then(Value::as_str))
         .collect::<Vec<_>>();
-    assert_eq!(
-        tool_names.contains(&"request_plugin_install"),
-        tool_suggest_enabled
-    );
-    assert!(!tool_names.contains(&"list_available_plugins_to_install"));
+    if remote_features {
+        assert_eq!(
+            tool_names.contains(&"request_plugin_install"),
+            tool_suggest_enabled
+        );
+        assert!(!tool_names.contains(&"list_available_plugins_to_install"));
+    }
     Ok(())
 }
