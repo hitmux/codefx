@@ -71,6 +71,13 @@ def linux_projection(path: str, text: str) -> str:
         text = re.sub(r"(?m)^      runner_(?:group|labels):.*\n", "", text)
         text = text.replace("timeout-minutes: 30", "timeout-minutes: 180")
         text = text.replace("timeout_minutes: 30", "timeout_minutes: 180")
+    if name == "v8-canary.yml":
+        # Normal builds use the sandbox archive. Canary variants must choose
+        # their own feature explicitly so the release variant stays unsandboxed.
+        text = text.replace(
+            'cargo_args=(test -p codex-v8-poc --target "${TARGET}")',
+            'cargo_args=(test -p codex-v8-poc --no-default-features --target "${TARGET}")',
+        )
     if name == "bazel.yml":
         # This matrix value only named caches; both entries executed native GNU.
         text = text.replace(

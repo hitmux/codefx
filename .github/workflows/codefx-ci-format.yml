@@ -19,9 +19,69 @@ on:
         description: Verify plugin isolation and local plugin compatibility
         type: boolean
         default: false
+      runtime_regressions:
+        description: Diagnose CLI startup and shell snapshot regressions
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
+  runtime-regressions:
+    if: github.event_name == 'workflow_dispatch' && inputs.runtime_regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [exec, shell]
+    env:
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_CI_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
+      RUST_BACKTRACE: "1"
+      RUST_LOG: codex_exec_server=warn
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - uses: ./.github/actions/codefx-linux-voice-sdk
+        if: matrix.component == 'exec'
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: ./.github/actions/setup-rusty-v8
+        if: matrix.component == 'exec'
+        with:
+          target: x86_64-unknown-linux-gnu
+      - name: Install sandbox test prerequisites
+        run: sudo apt-get install -y --no-install-recommends build-essential libcap-dev bubblewrap
+      - name: Reuse Cargo download inputs
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-sources-v2-${{ runner.os }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: cargo-nextest@0.9.103
+      - name: Prepare bundled sandbox executable
+        working-directory: codex-rs
+        run: |
+          cargo build --locked --profile ci-test --bin bwrap
+          runtime="$CARGO_TARGET_DIR/ci-test"
+          echo "CODEX_BWRAP_SHA256=$(sha256sum "$runtime/bwrap" | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
+          install -Dm755 "$runtime/bwrap" "$runtime/codex-resources/bwrap"
+      - name: Verify shell snapshot regressions
+        if: matrix.component == 'shell'
+        working-directory: codex-rs
+        run: cargo nextest run --locked --cargo-profile ci-test -p codex-exec-server --no-fail-fast --test-threads 2 --retries 0 -E 'test(shell_snapshot)'
+      - name: Verify isolated CLI startup
+        if: matrix.component == 'exec'
+        working-directory: codex-rs
+        run: |
+          cargo build --locked --profile ci-test -p codex-exec --bin codex-exec
+          cargo nextest run --locked --cargo-profile ci-test -p codex-exec --no-fail-fast --test-threads 2 --retries 0 -E 'test(suite::auth_env::exec_uses_codex_api_key_env_var) | test(suite::agents_md)'
   plugin-regressions:
     if: github.event_name == 'workflow_dispatch' && inputs.plugin_regressions
     runs-on: ubuntu-24.04
@@ -133,6 +193,7 @@ jobs:
           uv run --frozen --project scripts ruff format \
             .github/scripts/check_upstream_ci.py \
             .github/scripts/test_upstream_ci.py \
+            .github/scripts/verify_cargo_workspace_manifests.py \
             .github/scripts/select_cargo_ci_packages.py \
             .github/scripts/test_codefx_ci.py \
             .github/scripts/check_ci_results.py \

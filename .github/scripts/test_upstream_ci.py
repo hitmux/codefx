@@ -53,6 +53,36 @@ class LinuxProjection(unittest.TestCase):
         self.assertNotIn("build-windows-source", projected)
         self.assertNotIn("target: aarch64-apple-darwin", projected)
 
+    def test_v8_canary_selects_each_native_feature_variant_explicitly(self):
+        path = ".github/workflows/v8-canary.yml"
+        official = (
+            'cargo_args=(test -p codex-v8-poc --target "${TARGET}")\n'
+            'if [[ "${SANDBOX}" == "true" ]]; then\n'
+            '  cargo_args+=(--features sandbox)\n'
+            'fi\n'
+            'cargo_args+=(-- --include-ignored)\n'
+        )
+        projected = policy.linux_projection(path, official)
+        self.assertIn("--no-default-features", projected)
+        self.assertIn("--features sandbox", projected)
+        self.assertIn("--include-ignored", projected)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "fork"
+            upstream = Path(temp) / "upstream"
+            for directory in (root, upstream):
+                (directory / path).parent.mkdir(parents=True)
+            (upstream / path).write_text(official)
+            (root / path).write_text(projected)
+            self.assertEqual(policy.baseline_errors(root, upstream, [path]), [])
+            for mutation in (
+                projected.replace(" --no-default-features", ""),
+                projected.replace("--features sandbox", "--features wrong"),
+                projected.replace("--include-ignored", "--ignored"),
+            ):
+                with self.subTest(mutation=mutation):
+                    (root / path).write_text(mutation)
+                    self.assertTrue(policy.baseline_errors(root, upstream, [path]))
+
     def test_nextest_archive_prepares_verified_v8_inputs(self):
         path = ".github/workflows/rust-ci-full-nextest-platform.yml"
         official = (

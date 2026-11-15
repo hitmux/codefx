@@ -72,6 +72,9 @@ The policy checker permits only these reviewed transformations:
 - Put Zig's local cache outside the checkout and report disk consumption.
 - Supply the checksum-verified Codex V8 archive and pinned GNU voice SDK/runtime.
   Keep voice version probes, voice tests and V8 consumers enabled.
+- Select V8 canary features explicitly with `--no-default-features`, enabling
+  `sandbox` only for that native variant. The normal workspace probe defaults to
+  the sandbox pair used by production; both canary variants retain all tests.
 - Use the canonical DotSlash action URL and the cargo-deny container cache path.
 - Omit the unavailable OpenAI Fence audit hook while retaining blob-size checks.
 
