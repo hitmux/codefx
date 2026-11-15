@@ -150,7 +150,9 @@ class RequiredGate(unittest.TestCase):
         self.assertEqual(policy.coverage_errors(policy.ROOT), [])
 
     def test_sdk_cannot_use_a_package_without_a_successful_producer(self):
-        weakened = self.blocking.replace("needs: [ci-policy, codefx-source-smoke]", "needs: ci-policy")
+        weakened = self.blocking.replace(
+            "needs: [ci-policy, codefx-source-smoke]", "needs: ci-policy"
+        )
         self.assertTrue(policy.gate_errors(weakened))
 
     def test_terminal_gate_cannot_be_skipped_after_failure(self):

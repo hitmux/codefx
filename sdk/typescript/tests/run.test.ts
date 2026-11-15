@@ -12,7 +12,6 @@ import {
   sse,
   responseFailed,
   startResponsesTestProxy,
-  SseResponseBody,
 } from "./responsesProxy";
 import { createMockClient, createTestClient } from "./testCodex";
 

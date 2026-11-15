@@ -86,7 +86,10 @@ class VerifiedDownload(unittest.TestCase):
 
     def test_network_failure_uses_verified_mirror(self):
         code, content, calls, partials = self.download(["offline", "verified"])
-        self.assertEqual((code, content, calls, partials), (0, b"verified", ["offline", "verified"], []))
+        self.assertEqual(
+            (code, content, calls, partials),
+            (0, b"verified", ["offline", "verified"], []),
+        )
 
     def test_checksum_failure_does_not_promote_or_try_another_mirror(self):
         code, content, calls, partials = self.download(["tampered", "verified"])
@@ -96,7 +99,9 @@ class VerifiedDownload(unittest.TestCase):
     def test_all_sources_down_preserves_existing_file(self):
         code, content, calls, partials = self.download(["offline", "offline"])
         self.assertNotEqual(code, 0)
-        self.assertEqual((content, calls, partials), (b"previous", ["offline", "offline"], []))
+        self.assertEqual(
+            (content, calls, partials), (b"previous", ["offline", "offline"], [])
+        )
 
 
 class AggregateResults(unittest.TestCase):

@@ -69,10 +69,10 @@ jobs:
           set -euo pipefail
           cargo metadata --locked --no-deps --format-version 1 |
             python3 ../.github/scripts/select_cargo_ci_packages.py --shard "$SHARD" > "$RUNNER_TEMP/cargo-packages"
-      - name: Build the runtime sandbox helper
+      - name: Build workspace runtime executables
         if: matrix.task != 'clippy'
         run: |
-          cargo build --locked --profile ci-test --target "$TARGET" -p codex-linux-sandbox --bin codex-linux-sandbox
+          cargo build --locked --profile ci-test --target "$TARGET" --workspace --bins
           helper="$CARGO_TARGET_DIR/$TARGET/ci-test/codex-linux-sandbox"
           echo "CARGO_BIN_EXE_codex-linux-sandbox=$helper" >> "$GITHUB_ENV"
           echo "CARGO_BIN_EXE_codex_linux_sandbox=$helper" >> "$GITHUB_ENV"

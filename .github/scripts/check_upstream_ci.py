@@ -82,15 +82,28 @@ def linux_projection(path: str, text: str) -> str:
             "name: Bazel native GNU tests on ${{ matrix.os }}",
         )
     if name == "rust-ci.yml":
-        start = text.index("  argument_comment_lint_prebuilt:\n") if "  argument_comment_lint_prebuilt:\n" in text else -1
+        start = (
+            text.index("  argument_comment_lint_prebuilt:\n")
+            if "  argument_comment_lint_prebuilt:\n" in text
+            else -1
+        )
         if start >= 0:
             end = text.index("  # --- Gatherer", start)
             text = text[:start] + text[end:]
             text = text.replace("        argument_comment_lint_prebuilt,\n", "")
-            text = text.replace('          echo "arglint: ${{ needs.argument_comment_lint_prebuilt.result }}"\n', "")
-            start = text.index('          if [[ "${NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT}" ==')
+            text = text.replace(
+                '          echo "arglint: ${{ needs.argument_comment_lint_prebuilt.result }}"\n',
+                "",
+            )
+            start = text.index(
+                '          if [[ "${NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT}" =='
+            )
             end = text.index('          if [[ "${NEEDS_CHANGED_OUTPUTS_CODEX}"', start)
             text = text[:start] + text[end:]
+            text = text.replace(
+                "    needs:\n      [\n        changed,\n        general,\n        cargo_shear,\n        argument_comment_lint_package,\n      ]\n",
+                "    needs: [changed, general, cargo_shear, argument_comment_lint_package]\n",
+            )
     if name == "sdk.yml":
         text = re.sub(
             r"    runs-on:\n      group:.*\n      labels:.*\n",
@@ -104,8 +117,13 @@ def linux_projection(path: str, text: str) -> str:
         start = text.index("      - name: Save bazel repository cache")
         end = text.index("      - name: Check for a clean worktree", start)
         text = text[:start] + text[end:]
-        text = text.replace("    environment:\n      name: bazel\n      deployment: false\n", "")
-        text = text.replace("pnpm -r --filter ./sdk/typescript run test", "pnpm -r --filter ./sdk/typescript run test -- --runInBand")
+        text = text.replace(
+            "    environment:\n      name: bazel\n      deployment: false\n", ""
+        )
+        text = text.replace(
+            "pnpm -r --filter ./sdk/typescript run test",
+            "pnpm -r --filter ./sdk/typescript run test --runInBand",
+        )
     if name == "rust-ci-full.yml":
         prefix, marker, suffix = text.partition("  lint_build:\n")
         suffix = suffix.replace(
@@ -130,8 +148,12 @@ def linux_projection(path: str, text: str) -> str:
             "      SCCACHE_CACHE_SIZE: 10G",
             '      SCCACHE_CACHE_SIZE: 2G\n      CARGO_PROFILE_CI_TEST_DEBUG: "0"\n      CARGO_PROFILE_CI_TEST_INCREMENTAL: "false"',
         )
-        text = text.replace("tool: sccache\n          version: 0.7.5", "tool: sccache@0.12.0")
-        text = text.replace("tool: nextest\n          version: 0.9.103", "tool: cargo-nextest@0.9.103")
+        text = text.replace(
+            "tool: sccache\n          version: 0.7.5", "tool: sccache@0.12.0"
+        )
+        text = text.replace(
+            "tool: nextest\n          version: 0.9.103", "tool: cargo-nextest@0.9.103"
+        )
         text = text.replace("            ~/.cargo/bin/\n", "")
         text = text.replace(
             "cargo-home-${{ env.ARCHIVE_CACHE_RUNNER }}-${{ inputs.target }}-${{ inputs.profile }}-",
@@ -222,6 +244,7 @@ def coverage_errors(root: Path) -> list[str]:
             'cargo clippy --locked --workspace --all-targets --target "$TARGET" -- -D warnings',
             'select_cargo_ci_packages.py --shard "$SHARD"',
             'cargo nextest run --locked --target "$TARGET" --cargo-profile ci-test --no-fail-fast --test-threads 2 "${packages[@]}"',
+            'cargo build --locked --profile ci-test --target "$TARGET" --workspace --bins',
             "uses: ./.github/actions/setup-rusty-v8",
             "uses: ./.github/actions/codefx-linux-voice-sdk",
         ),
@@ -238,7 +261,7 @@ def coverage_errors(root: Path) -> list[str]:
             "name: codefx-source-x86_64-unknown-linux-musl",
             "run: python3 scripts/install/prepare_sdk_package.py",
             "uv run --only-group dev --frozen --no-sync pytest",
-            "pnpm -r --filter ./sdk/typescript run test -- --runInBand",
+            "pnpm -r --filter ./sdk/typescript run test --runInBand",
         ),
         ".github/workflows/codefx-source-smoke.yml": (
             "target: x86_64-unknown-linux-musl",
@@ -327,7 +350,9 @@ def main():
     if errors:
         raise SystemExit("\n".join(errors))
     print(f"Official Linux CI matches {manifest['tag']} ({manifest['commit']})")
-    print("Fast Cargo, SDK and Codefx coverage is required; full Bazel remains extended.")
+    print(
+        "Fast Cargo, SDK and Codefx coverage is required; full Bazel remains extended."
+    )
 
 
 if __name__ == "__main__":
