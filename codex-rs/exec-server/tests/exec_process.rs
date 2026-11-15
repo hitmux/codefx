@@ -258,7 +258,7 @@ async fn shell_snapshot_v2_filters_profile_exports_and_stays_in_memory(
     let shadowed_builtins = if posix_shell {
         ""
     } else {
-        "unset() { exit 41; }\nbuiltin() { exit 41; }\nexec() { exit 41; }\n"
+        "unset() { printf 'shadowed unset: %s\\n' \"$*\" >> \"$HOME/startup-trace\"; exit 41; }\nbuiltin() { printf 'shadowed builtin: %s\\n' \"$*\" >> \"$HOME/startup-trace\"; exit 41; }\nexec() { printf 'shadowed exec: %s\\n' \"$*\" >> \"$HOME/startup-trace\"; exit 41; }\n"
     };
     std::fs::write(
         &profile_path,
@@ -368,7 +368,9 @@ async fn shell_snapshot_v2_filters_profile_exports_and_stays_in_memory(
             collect_process_output_from_events(started.process).await?;
         assert_eq!(
             (stdout, stderr, status, closed),
-            (expected_stdout.clone(), String::new(), Some(0), true,)
+            (expected_stdout.clone(), String::new(), Some(0), true,),
+            "startup diagnostics: {}",
+            std::fs::read_to_string(home.path().join("startup-trace")).unwrap_or_default()
         );
     }
 
@@ -1107,7 +1109,7 @@ async fn shell_snapshot_v2_capture_failure_falls_back_and_retries(
 
     std::fs::write(
         home.path().join(profile_name),
-        "printf x >> \"$HOME/captures\"\nprofile_helper() { printf recovered; }\n",
+        "printf 'flags=%s source=%s bash_env=%s argv0=%s\\n' \"$-\" \"${BASH_SOURCE[*]-}\" \"${BASH_ENV-}\" \"$0\" >> \"$HOME/startup-trace\"\nprintf x >> \"$HOME/captures\"\nprofile_helper() { printf recovered; }\n",
     )?;
     let (expected_output, expected_captures) = if failures_before_repair == 3 {
         ("original", "xxx")
@@ -1124,7 +1126,9 @@ async fn shell_snapshot_v2_capture_failure_falls_back_and_retries(
     }
     assert_eq!(
         std::fs::read_to_string(home.path().join("captures"))?,
-        expected_captures
+        expected_captures,
+        "startup diagnostics: {}",
+        std::fs::read_to_string(home.path().join("startup-trace")).unwrap_or_default()
     );
     Ok(())
 }

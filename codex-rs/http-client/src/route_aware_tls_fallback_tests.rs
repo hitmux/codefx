@@ -50,7 +50,10 @@ async fn native_transport_protocol_error_remains_recognizable() {
         .expect_err("protocol rejection");
     let _ = stop_server.send(());
     assert_eq!(attempts.recv().unwrap().unwrap(), 1);
-    assert!(should_retry_with_rustls(&error), "raw native TLS error: {error:?}");
+    assert!(
+        should_retry_with_rustls(&error),
+        "raw native TLS error: {error:?}"
+    );
     assert!(
         std::env::var_os("CODEX_CA_CERTIFICATE").is_none()
             && std::env::var_os("SSL_CERT_FILE").is_none(),
