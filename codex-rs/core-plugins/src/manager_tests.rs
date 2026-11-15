@@ -1664,12 +1664,15 @@ enabled = true
 }
 
 #[tokio::test]
-async fn remote_global_catalog_ignores_local_curated_plugins() {
+async fn remote_catalog_opt_in_preserves_locally_installed_curated_plugins() {
     let codex_home = TempDir::new().unwrap();
     write_file(
         &codex_home.path().join(CONFIG_TOML_FILE),
         r#"[features]
 plugins = true
+remote_plugin = true
+plugin_sharing = true
+apps = true
 
 [plugins."linear@openai-curated"]
 enabled = true
@@ -1701,7 +1704,8 @@ enabled = true
     assert_eq!(
         loaded_plugin_names(&manager, &config).await,
         vec![
-            "linear@openai-curated-remote".to_string(),
+            "calendar@openai-curated".to_string(),
+            "linear@openai-curated".to_string(),
             "remote-only@openai-curated-remote".to_string(),
         ]
     );

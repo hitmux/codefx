@@ -765,7 +765,11 @@ impl PluginsManager {
     }
 
     fn remote_global_catalog_active(&self, config: &PluginsConfigInput) -> bool {
-        config.remote_plugin_enabled && self.auth_mode().is_some_and(AuthMode::uses_codex_backend)
+        // Catalog opt-in must not replace or hide an already installed local
+        // curated plugin when Codefx has disabled automatic reconciliation.
+        AUTOMATIC_PLUGIN_UPDATES_ENABLED
+            && config.remote_plugin_enabled
+            && self.auth_mode().is_some_and(AuthMode::uses_codex_backend)
     }
 
     /// Starts the local curated marketplace sync when the remote catalog is unavailable.

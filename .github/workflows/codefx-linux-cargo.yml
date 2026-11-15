@@ -114,6 +114,7 @@ jobs:
         with:
           name: codefx-cargo-junit-${{ matrix.task }}
           path: ${{ env.CARGO_TARGET_DIR }}/nextest/default/junit.xml
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 3
       - name: Check for a clean worktree
