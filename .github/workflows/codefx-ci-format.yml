@@ -26,7 +26,7 @@ on:
       runtime_component:
         description: Runtime component to verify
         type: choice
-        options: [all, exec, shell, app-server]
+        options: [all, exec, shell, app-server, core]
         default: all
       sdk_regressions:
         description: Verify SDK child process lifecycle regressions
@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: ${{ fromJSON(inputs.runtime_component == 'shell' && '["shell"]' || inputs.runtime_component == 'exec' && '["exec"]' || inputs.runtime_component == 'app-server' && '["app-server"]' || '["exec","shell"]') }}
+        component: ${{ fromJSON(inputs.runtime_component == 'shell' && '["shell"]' || inputs.runtime_component == 'exec' && '["exec"]' || inputs.runtime_component == 'app-server' && '["app-server"]' || inputs.runtime_component == 'core' && '["core"]' || '["exec","shell"]') }}
     env:
       CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_CI_TEST_DEBUG: "0"
@@ -101,6 +101,13 @@ jobs:
           cargo build --locked --profile ci-test --bin codex-app-server --bin codex-linux-sandbox --bin codex-code-mode-host
           export CARGO_BIN_EXE_codex_linux_sandbox="$CARGO_TARGET_DIR/ci-test/codex-linux-sandbox"
           cargo nextest run --locked --cargo-profile ci-test -p codex-app-server --no-fail-fast --test-threads 2 --retries 0 -E 'test(suite::v2::plugin_) | test(curated_mcp_sync) | test(marketplace_upgrade) | test(plugin_metadata_refresh) | test(marketplace_upgrade_refreshes_hook_runtime) | test(api_key_cyber_access_program_server_rejection)'
+      - name: Verify core inference and local plugin regressions
+        if: matrix.component == 'core'
+        working-directory: codex-rs
+        run: |
+          cargo build --locked --profile ci-test --bin codex --bin codex-linux-sandbox --bin codex-exec --bin codex-code-mode-host
+          export CARGO_BIN_EXE_codex_linux_sandbox="$CARGO_TARGET_DIR/ci-test/codex-linux-sandbox"
+          cargo nextest run --locked --cargo-profile ci-test -p codex-core -p codex-config -p codex-v8-poc --no-fail-fast --test-threads 2 --retries 0 -E 'test(compact_program_tests) | test(rollout_budget) | test(bundled_plugin_compatibility_guard) | test(cli_stream) | test(reads_typed_array_contents) | package(codex-config)'
   plugin-regressions:
     if: github.event_name == 'workflow_dispatch' && inputs.plugin_regressions
     runs-on: ubuntu-24.04

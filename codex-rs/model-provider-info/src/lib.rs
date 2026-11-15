@@ -796,13 +796,17 @@ pub fn merge_configured_model_providers(
             // Transport budgets do not change provider identity, routing, or auth.
             // Preserve explicit zero values, including immediate WebSocket fallback.
             if let Some(built_in_provider) = model_providers.get_mut(&key) {
-                built_in_provider.request_max_retries = provider.request_max_retries
+                built_in_provider.request_max_retries = provider
+                    .request_max_retries
                     .or(built_in_provider.request_max_retries);
-                built_in_provider.stream_max_retries = provider.stream_max_retries
+                built_in_provider.stream_max_retries = provider
+                    .stream_max_retries
                     .or(built_in_provider.stream_max_retries);
-                built_in_provider.stream_idle_timeout_ms = provider.stream_idle_timeout_ms
+                built_in_provider.stream_idle_timeout_ms = provider
+                    .stream_idle_timeout_ms
                     .or(built_in_provider.stream_idle_timeout_ms);
-                built_in_provider.websocket_connect_timeout_ms = provider.websocket_connect_timeout_ms
+                built_in_provider.websocket_connect_timeout_ms = provider
+                    .websocket_connect_timeout_ms
                     .or(built_in_provider.websocket_connect_timeout_ms);
             }
             if let Some(catalog_url) = provider.model_catalog_url.take()

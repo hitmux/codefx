@@ -80,10 +80,13 @@ async fn remote_reconcile_preserves_local_skills_and_live_mcp() -> Result<()> {
                 }
             }),
         )
-        .route("/bundle", get(move || async move {
-            server_bundle_requests.fetch_add(1, Ordering::SeqCst);
-            bundle
-        }));
+        .route(
+            "/bundle",
+            get(move || async move {
+                server_bundle_requests.fetch_add(1, Ordering::SeqCst);
+                bundle
+            }),
+        );
     let server_handle = tokio::spawn(async move {
         let _ = axum::serve(listener, router).await;
     });
@@ -106,9 +109,9 @@ async fn remote_reconcile_preserves_local_skills_and_live_mcp() -> Result<()> {
         AuthCredentialsStoreMode::File,
     )?;
     // Install the fixture locally; listing or reconciliation must never fetch it.
-    let plugin_root = codex_home.path().join(
-        "plugins/cache/openai-curated-remote/demo-plugin/1.0.0",
-    );
+    let plugin_root = codex_home
+        .path()
+        .join("plugins/cache/openai-curated-remote/demo-plugin/1.0.0");
     for (path, contents) in [
         (".codex-plugin/plugin.json", r#"{"name":"demo-plugin"}"#),
         ("skills/deploy/SKILL.md", SKILL_CONTENTS),

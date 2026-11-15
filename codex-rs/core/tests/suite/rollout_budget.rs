@@ -52,8 +52,24 @@ fn rollout_budget_message(remaining_tokens: i64) -> String {
     )
 }
 
+fn wire_request_body(request: &wiremock::Request) -> Option<serde_json::Value> {
+    let compressed = request
+        .headers
+        .get("content-encoding")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value.split(',').any(|entry| entry.trim().eq_ignore_ascii_case("zstd"))
+        });
+    let bytes = if compressed {
+        zstd::stream::decode_all(std::io::Cursor::new(&request.body)).ok()?
+    } else {
+        request.body.clone()
+    };
+    serde_json::from_slice(&bytes).ok()
+}
+
 fn wire_request_contains(request: &wiremock::Request, text: &str) -> bool {
-    std::str::from_utf8(&request.body).is_ok_and(|body| body.contains(text))
+    wire_request_body(request).is_some_and(|body| body.to_string().contains(text))
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -206,9 +222,8 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
     mount_sse_once_match(
         &server,
         |request: &wiremock::Request| {
-            request
-                .body_json::<serde_json::Value>()
-                .is_ok_and(|body| body["client_metadata"]["x-codex-parent-thread-id"].is_string())
+            wire_request_body(request)
+                .is_some_and(|body| body["client_metadata"]["x-codex-parent-thread-id"].is_string())
         },
         sse(vec![
             ev_response_created("child-1"),
@@ -220,9 +235,8 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
         &server,
         |request: &wiremock::Request| {
             wire_request_contains(request, SPAWN_CALL_ID)
-                && request
-                    .body_json::<serde_json::Value>()
-                    .is_ok_and(|body| body["client_metadata"]["x-codex-parent-thread-id"].is_null())
+                && wire_request_body(request)
+                    .is_some_and(|body| body["client_metadata"]["x-codex-parent-thread-id"].is_null())
         },
         sse(vec![
             ev_response_created("root-2"),
@@ -253,14 +267,14 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
         .await?;
 
     let mut created_threads = test.thread_manager.subscribe_thread_created();
-    test.submit_turn(ROOT_PROMPT).await?;
+    timeout(Duration::from_secs(20), test.submit_turn(ROOT_PROMPT)).await??;
     let child_thread_id = timeout(Duration::from_secs(10), created_threads.recv()).await??;
     let child_thread = test.thread_manager.get_thread(child_thread_id).await?;
-    wait_for_event(child_thread.as_ref(), |event| {
+    timeout(Duration::from_secs(20), wait_for_event(child_thread.as_ref(), |event| {
         matches!(event, EventMsg::TurnComplete(_))
-    })
-    .await;
-    test.submit_turn(FOLLOW_UP_PROMPT).await?;
+    }))
+    .await?;
+    timeout(Duration::from_secs(20), test.submit_turn(FOLLOW_UP_PROMPT)).await??;
 
     let requests = follow_up
         .requests()

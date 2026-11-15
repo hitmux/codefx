@@ -21,6 +21,14 @@ without fetching account state or changing local files.
 Install, remove, and upgrade plugins through explicit plugin commands or actions.
 Configured local plugins and skills remain available without remote account sync.
 
+## OpenAI retry and timeout settings
+
+The built-in OpenAI provider honors explicit `request_max_retries`,
+`stream_max_retries`, `stream_idle_timeout_ms`, and `websocket_connect_timeout_ms`
+under `[model_providers.openai]`, including zero retries. Unspecified values use
+Codefx's defaults. OpenAI routing and authentication use the built-in provider
+settings.
+
 ## Lifecycle hooks
 
 Admins can set top-level `allow_managed_hooks_only = true` in

@@ -229,9 +229,13 @@ async fn auth_switch_preserves_local_mcp_without_curated_sync() -> Result<()> {
     // Releasing the old sync gate must not materialize anything after login.
     std::fs::write(&fixture.sync_barrier, "continue")?;
     tokio::time::sleep(Duration::from_millis(200)).await;
-    assert!(!fixture._fixture_root.path().join(
-        "codex-home/plugins/cache/openai-api-curated/api-plugin",
-    ).exists());
+    assert!(
+        !fixture
+            ._fixture_root
+            .path()
+            .join("codex-home/plugins/cache/openai-api-curated/api-plugin",)
+            .exists()
+    );
     ensure!(
         !fixture.malicious_git_helper_marker.exists(),
         "curated startup synchronization executed repository-local Git configuration"

@@ -1229,12 +1229,12 @@ async fn legacy_plugin_skill_prompt_remains_complete() -> Result<()> {
     Ok(())
 }
 
-#[test_case("sites", None, true, true, (true, false); "sites enabled remote supersedes bundled")]
-#[test_case("sites", Some("tpp"), true, true, (true, false); "sites configured work sku")]
-#[test_case("sites", None, false, true, (false, false); "sites disabled remote does not reactivate bundled")]
+#[test_case("sites", None, true, true, (true, true); "sites enabled remote preserves bundled")]
+#[test_case("sites", Some("tpp"), true, true, (true, true); "sites configured work sku")]
+#[test_case("sites", None, false, true, (false, true); "sites disabled remote preserves bundled")]
 #[test_case("sites", None, true, false, (false, true); "sites missing remote bundle preserves bundled")]
-#[test_case("visualize", None, true, true, (true, false); "visualize enabled remote supersedes bundled")]
-#[test_case("visualize", None, false, true, (false, false); "visualize disabled remote does not reactivate bundled")]
+#[test_case("visualize", None, true, true, (true, true); "visualize enabled remote preserves bundled")]
+#[test_case("visualize", None, false, true, (false, true); "visualize disabled remote preserves bundled")]
 #[test_case("visualize", None, true, false, (false, true); "visualize missing remote bundle preserves bundled")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn bundled_plugin_compatibility_guard_in_agent_turn(
@@ -1348,7 +1348,7 @@ enabled = true
             developer_text.contains(&format!("{plugin_name}:bundled-skill")),
         ),
         expected_skills,
-        "unexpected {plugin_name} skills in developer prompt: {developer_text:?}"
+        "unexpected remote/bundled {plugin_name} skill availability"
     );
     Ok(())
 }

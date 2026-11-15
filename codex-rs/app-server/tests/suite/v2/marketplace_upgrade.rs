@@ -307,7 +307,10 @@ async fn startup_skips_git_while_explicit_install_preserves_configuration(
         .join("plugins/cache/trusted/toolkit/1.0.0/.codex-plugin/plugin.json");
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert!(!plugin_root.exists());
-    assert!(abandoned.exists(), "startup must not clean or replace plugin state");
+    assert!(
+        abandoned.exists(),
+        "startup must not clean or replace plugin state"
+    );
 
     if invalid_user_config {
         // Subsequent explicit operations must pick up a repaired user config normally.

@@ -1040,7 +1040,8 @@ fn builtin_openai_transport_limits_preserve_routing_and_authentication() {
         merge_configured_model_providers(
             builtins,
             HashMap::from([("openai".to_string(), configured)]),
-        ).unwrap(),
+        )
+        .unwrap(),
         expected,
     );
 }

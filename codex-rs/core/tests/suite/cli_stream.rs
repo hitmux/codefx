@@ -121,9 +121,12 @@ impl Drop for ChildProcessCleanupGuard {
 fn run_cli_command(command: &mut Command) -> io::Result<Output> {
     // These fixtures test response streaming, not live API-key catalog discovery.
     command.args([
-        "-c", "features.api_key_model_discovery=false",
-        "-c", "model_providers.openai.request_max_retries=0",
-        "-c", "model_providers.openai.stream_max_retries=0",
+        "-c",
+        "features.api_key_model_discovery=false",
+        "-c",
+        "model_providers.openai.request_max_retries=0",
+        "-c",
+        "model_providers.openai.stream_max_retries=0",
     ]);
     #[cfg(unix)]
     command.process_group(0);

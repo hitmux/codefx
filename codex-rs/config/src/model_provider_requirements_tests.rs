@@ -21,6 +21,29 @@ X-Managed = "yes"
 "#;
 
 #[test]
+fn openai_transport_budgets_load_without_allowing_provider_replacement() -> anyhow::Result<()> {
+    let config: crate::config_toml::ConfigToml = toml::from_str(
+        "[model_providers.openai]\nrequest_max_retries = 0\nstream_max_retries = 0\nstream_idle_timeout_ms = 250\nwebsocket_connect_timeout_ms = 100",
+    )?;
+    let provider = &config.model_providers["openai"];
+    assert_eq!(provider.request_max_retries, Some(0));
+    assert_eq!(provider.stream_max_retries, Some(0));
+    assert_eq!(provider.stream_idle_timeout_ms, Some(250));
+    assert_eq!(provider.websocket_connect_timeout_ms, Some(100));
+    for replacement in [
+        "name = 'Replacement'",
+        "base_url = 'https://example.test/v1'",
+        "env_key = 'OTHER_KEY'",
+        "supports_websockets = true",
+    ] {
+        assert!(toml::from_str::<crate::config_toml::ConfigToml>(&format!(
+            "[model_providers.openai]\nrequest_max_retries = 0\n{replacement}"
+        )).is_err(), "transport overrides must not allow {replacement}");
+    }
+    Ok(())
+}
+
+#[test]
 fn higher_requirements_merge_provider_fields_and_nested_tables() -> anyhow::Result<()> {
     let cloud_source = RequirementSource::EnterpriseManaged {
         id: "req_1".into(),

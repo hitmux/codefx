@@ -166,7 +166,8 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
         let wrapper = home.path().join("snapshot-shell");
         codex_utils_cargo_bin::write_executable(
             &wrapper,
-            &format!(r#"#!/usr/bin/python3
+            &format!(
+                r#"#!/usr/bin/python3
 import os
 import sys
 for descriptor in os.listdir('/dev/fd'):
@@ -177,7 +178,8 @@ for descriptor in os.listdir('/dev/fd'):
     except (OSError, ValueError):
         pass
 os.execv('/bin/{shell}', ['/bin/{shell}', *sys.argv[1:]])
-"#),
+"#
+            ),
         )?;
         wrapper.to_string_lossy().into_owned()
     } else {
@@ -228,40 +230,40 @@ os.execv('/bin/{shell}', ['/bin/{shell}', *sys.argv[1:]])
         let protected_path = protected_file.path();
         async move {
             let params = ExecParams {
-                    metadata: Default::default(),
-                    process_id: format!("parallel-{index}").into(),
-                    argv: vec![shell_path.clone(), "-lc".to_string(), command],
-                    cwd,
-                    env: HashMap::new(),
-                    env_policy: Some(ExecEnvPolicy {
-                        inherit: ShellEnvironmentPolicyInherit::None,
-                        ignore_default_excludes: false,
-                        exclude: Vec::new(),
-                        r#set: HashMap::from([
-                            ("HOME".to_string(), home.to_string_lossy().into_owned()),
-                            ("PATH".to_string(), "/usr/bin:/bin".to_string()),
-                            (
-                                "SNAPSHOT_TRANSPORT_PROBE".to_string(),
-                                protected_path.to_string_lossy().into_owned(),
-                            ),
-                        ]),
-                        include_only: Vec::new(),
-                    }),
-                    shell_snapshot: Some(ShellSnapshotRequest {
-                        scope_id: "parallel".to_string(),
-                        shell: ShellInfo {
-                            name: shell.to_string(),
-                            path: shell_path,
-                        },
-                    }),
-                    tty,
-                    pipe_stdin: true,
-                    arg0: None,
-                    sandbox,
-                    enforce_managed_network: false,
-                    managed_network: None,
-                    network_proxy: None,
-                };
+                metadata: Default::default(),
+                process_id: format!("parallel-{index}").into(),
+                argv: vec![shell_path.clone(), "-lc".to_string(), command],
+                cwd,
+                env: HashMap::new(),
+                env_policy: Some(ExecEnvPolicy {
+                    inherit: ShellEnvironmentPolicyInherit::None,
+                    ignore_default_excludes: false,
+                    exclude: Vec::new(),
+                    r#set: HashMap::from([
+                        ("HOME".to_string(), home.to_string_lossy().into_owned()),
+                        ("PATH".to_string(), "/usr/bin:/bin".to_string()),
+                        (
+                            "SNAPSHOT_TRANSPORT_PROBE".to_string(),
+                            protected_path.to_string_lossy().into_owned(),
+                        ),
+                    ]),
+                    include_only: Vec::new(),
+                }),
+                shell_snapshot: Some(ShellSnapshotRequest {
+                    scope_id: "parallel".to_string(),
+                    shell: ShellInfo {
+                        name: shell.to_string(),
+                        path: shell_path,
+                    },
+                }),
+                tty,
+                pipe_stdin: true,
+                arg0: None,
+                sandbox,
+                enforce_managed_network: false,
+                managed_network: None,
+                network_proxy: None,
+            };
             if close_descriptors && index == 0 {
                 let mut probe = params.clone();
                 probe.process_id = "descriptor-sandbox-probe".into();

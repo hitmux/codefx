@@ -1408,6 +1408,13 @@ async fn run_pre_sampling_compact(
     client_session: &mut ModelClientSession,
     cancellation_token: &CancellationToken,
 ) -> CodexResult<()> {
+    // Reject an unavailable explicit program before compaction can send an
+    // inference request using the previous turn's model and program.
+    cyber_access_program::for_auth(
+        sess.services.auth_manager.auth().await.as_ref(),
+        turn_context.cyber_access_program,
+        cyber_access_program::ApiKeyCyberAccessPrograms::from_config(&turn_context.config),
+    )?;
     maybe_run_previous_model_inline_compact(sess, turn_context, client_session, cancellation_token)
         .await?;
     let token_status =

@@ -844,11 +844,11 @@ source = "{}"
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert!(old_plugin_root.exists());
     assert!(!new_plugin_root.exists());
-    let upgrade = mcp.send_marketplace_upgrade_request(
-        codex_app_server_protocol::MarketplaceUpgradeParams {
+    let upgrade = mcp
+        .send_marketplace_upgrade_request(codex_app_server_protocol::MarketplaceUpgradeParams {
             marketplace_name: Some("test".to_string()),
-        },
-    ).await?;
+        })
+        .await?;
     let _: codex_app_server_protocol::MarketplaceUpgradeResponse =
         timeout(DEFAULT_TIMEOUT, mcp.read_response(upgrade)).await??;
     assert!(new_plugin_root.exists());
