@@ -111,7 +111,11 @@ jobs:
         run: |
           cargo build --locked --profile ci-test --bin codex --bin codex-linux-sandbox --bin codex-exec --bin codex-code-mode-host --bin test_stdio_server
           export CARGO_BIN_EXE_codex_linux_sandbox="$CARGO_TARGET_DIR/ci-test/codex-linux-sandbox"
-          cargo nextest run --locked --cargo-profile ci-test -p codex-core -p codex-config -p codex-v8-poc --no-fail-fast --test-threads 2 --retries 0 -E 'test(compact_program_tests) | test(rollout_budget) | test(bundled_plugin_compatibility_guard) | test(cli_stream) | test(reads_typed_array_contents) | package(codex-config)'
+          cargo nextest run --locked --cargo-profile ci-test -p codex-core -p codex-config -p codex-v8-poc --no-fail-fast --test-threads 2 --retries 0 -E 'test(compact_program_tests) | test(rollout_budget) | test(bundled_plugin_compatibility_guard) | test(cli_stream) | test(reads_typed_array_contents) | test(prompt_cache_key) | test(suite::scenarios) | package(codex-config)'
+          for iteration in {1..20}; do
+            echo "Core scheduling regression iteration $iteration/20"
+            cargo nextest run --locked --cargo-profile ci-test -p codex-core --test all --test-threads 2 --retries 0 -E 'test(api_key_subagent_inherits_prompt_cache_key_policy) | test(child_completion_wakes_parent_after_final_answer) | test(matched_response_mocks_capture_only_the_selected_thread)'
+          done
       - name: Verify generated binding against the verified native V8 library
         if: matrix.component == 'v8'
         working-directory: codex-rs

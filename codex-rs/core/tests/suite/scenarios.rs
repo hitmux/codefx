@@ -1558,6 +1558,44 @@ async fn astra_omits_disabled_executor_and_plugin_skills_from_model_context(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn matched_response_mocks_capture_only_the_selected_thread() -> Result<()> {
+    use core_test_support::responses;
+    use wiremock::matchers::header;
+
+    for use_sse in [false, true] {
+        let server = start_mock_server().await;
+        let mut routes = Vec::new();
+        for thread in ["parent", "child"] {
+            let capture = if use_sse {
+                responses::mount_sse_once_match(
+                    &server,
+                    header("thread-id", thread),
+                    sse(vec![ev_completed(thread)]),
+                ).await
+            } else {
+                responses::mount_response_once_match(
+                    &server,
+                    header("thread-id", thread),
+                    responses::sse_response(sse(vec![ev_completed(thread)])),
+                ).await
+            };
+            routes.push((thread, capture));
+        }
+        let client = reqwest::Client::builder().no_proxy().build()?;
+        for (thread, _) in &routes {
+            client.post(format!("{}/responses", server.uri()))
+                .header("thread-id", *thread)
+                .json(&json!({"input": []}))
+                .send().await?.error_for_status()?;
+        }
+        for (thread, capture) in routes {
+            assert_eq!(capture.single_request().header("thread-id").as_deref(), Some(thread));
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn child_completion_wakes_parent_after_final_answer() -> Result<()> {
     use core_test_support::ThreadIdle;
     use core_test_support::responses;
