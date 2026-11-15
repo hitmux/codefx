@@ -1,6 +1,7 @@
 //! Exercises the best-effort SiWC cost happy path through real app-server startup and OTLP.
 //! The public in-process transport permits advancing the production timer without test-only hooks.
 
+use anyhow::Context;
 use anyhow::Result;
 use app_test_support::ChatGptAuthFixture;
 use app_test_support::write_chatgpt_auth;
@@ -144,7 +145,7 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
     } else {
         EnvironmentManager::default_for_tests()
     };
-    let mut client = in_process::start(InProcessStartArgs {
+    let mut client = timeout(Duration::from_secs(20), in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
         config,
         cli_overrides: Vec::new(),
@@ -172,8 +173,8 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
             }),
         },
         channel_capacity: in_process::DEFAULT_IN_PROCESS_CHANNEL_CAPACITY,
-    })
-    .await?;
+    }))
+    .await.context("in-process startup timed out")??;
     wait_for_cost_queries(&server, /*count*/ 1).await;
     let response = timeout(Duration::from_secs(20), client
         .request(ClientRequest::ThreadStart {
@@ -187,7 +188,7 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
                 ..Default::default()
             },
         }))
-        .await??
+        .await.context("thread/start timed out")??
         .expect("thread/start");
     let ThreadStartResponse { thread, .. } = serde_json::from_value(response)?;
     let response = timeout(Duration::from_secs(20), client
@@ -202,7 +203,7 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
                 ..Default::default()
             },
         }))
-        .await??
+        .await.context("turn/start timed out")??
         .expect("turn/start");
     let TurnStartResponse { turn } = serde_json::from_value(response)?;
     timeout(Duration::from_secs(/*secs*/ 20), async {
@@ -219,7 +220,7 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
             }
         }
     })
-    .await?;
+    .await.context("model turn did not complete")?;
     assert_eq!(
         model.single_request().header("authorization").as_deref(),
         Some("Bearer siwc-token")
@@ -243,12 +244,12 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
             tokio::task::yield_now().await;
         }
     })
-    .await?;
+    .await.context("turn cost metric was not recorded")?;
     tokio::time::pause();
     tokio::time::advance(Duration::from_secs(/*secs*/ 301)).await;
     tokio::time::resume();
-    client.shutdown().await?;
-    tokio::task::spawn_blocking(move || provider.shutdown()).await?;
+    timeout(Duration::from_secs(10), client.shutdown()).await.context("app-server shutdown timed out")??;
+    timeout(Duration::from_secs(10), tokio::task::spawn_blocking(move || provider.shutdown())).await.context("OTLP shutdown timed out")??;
     let mut points = Vec::new();
     for request in collector.received_requests().await.expect("OTLP requests") {
         let body: Value = serde_json::from_slice(&request.body)?;
