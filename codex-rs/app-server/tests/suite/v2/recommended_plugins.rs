@@ -21,6 +21,7 @@ use serde_json::Value;
 use serde_json::json;
 use std::time::Duration;
 use tempfile::TempDir;
+use test_case::test_case;
 use tokio::time::timeout;
 use wiremock::Mock;
 use wiremock::ResponseTemplate;
@@ -36,19 +37,24 @@ enum ToolSuggestFeature {
     Disabled,
 }
 
+#[test_case(false; "default remote features")]
+#[test_case(true; "explicit remote features")]
 #[tokio::test]
-async fn first_turn_after_external_login_does_not_prefetch_recommended_plugins() -> Result<()> {
-    recommended_plugins_after_external_login(ToolSuggestFeature::Enabled).await
+async fn first_turn_after_external_login_preserves_local_plugins(remote_features: bool) -> Result<()> {
+    recommended_plugins_after_external_login(ToolSuggestFeature::Enabled, remote_features).await
 }
 
+#[test_case(false; "default remote features")]
+#[test_case(true; "explicit remote features")]
 #[tokio::test]
-async fn first_turn_after_external_login_does_not_prefetch_recommended_plugins_without_tool_suggest()
+async fn first_turn_after_external_login_preserves_local_plugins_without_tool_suggest(remote_features: bool)
 -> Result<()> {
-    recommended_plugins_after_external_login(ToolSuggestFeature::Disabled).await
+    recommended_plugins_after_external_login(ToolSuggestFeature::Disabled, remote_features).await
 }
 
 async fn recommended_plugins_after_external_login(
     tool_suggest_feature: ToolSuggestFeature,
+    remote_features: bool,
 ) -> Result<()> {
     let tool_suggest_enabled = matches!(tool_suggest_feature, ToolSuggestFeature::Enabled);
     let recommended_plugins_config = if tool_suggest_enabled {
@@ -73,7 +79,7 @@ async fn recommended_plugins_after_external_login(
                     }]
                 })),
         )
-        .expect(0)
+        .expect(u64::from(remote_features))
         .mount(&server)
         .await;
     let response = responses::sse(vec![
@@ -92,12 +98,17 @@ async fn recommended_plugins_after_external_login(
     let config_path = codex_home.path().join("config.toml");
     let config = std::fs::read_to_string(&config_path)?;
     std::fs::write(
-        config_path,
+        &config_path,
         format!(
-            "{config}\n[features]\napps = true\nplugins = true\nremote_plugin = true\nplugin_sharing = true\ntool_suggest = {tool_suggest_enabled}\n{recommended_plugins_config}"
+            "{config}\n[features]\napps = true\nplugins = true\nremote_plugin = {remote_features}\nplugin_sharing = {remote_features}\ntool_suggest = {tool_suggest_enabled}\n{recommended_plugins_config}"
         ),
     )?;
 
+    let original_config = std::fs::read(&config_path)?;
+    let local_skill = codex_home.path().join("skills/local/SKILL.md");
+    std::fs::create_dir_all(local_skill.parent().expect("skill parent"))?;
+    std::fs::write(&local_skill, "---\nname: local\ndescription: local only\n---\nbody\n")?;
+    let original_skill = std::fs::read(&local_skill)?;
     let sqlite_home = codex_home.path().to_string_lossy();
     let mut app_server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -130,8 +141,8 @@ async fn recommended_plugins_after_external_login(
         LoginAccountResponse::ChatgptAuthTokens {}
     );
 
-    // Wait for login completion before verifying the first turn stays independent
-    // of remote plugin prefetch, even with the remote features explicitly enabled.
+    // Wait for account completion before checking that optional catalog reads
+    // leave the local installation unchanged.
     let notification = timeout(
         DEFAULT_READ_TIMEOUT,
         app_server.read_stream_until_notification_message("account/login/completed"),
@@ -199,18 +210,16 @@ async fn recommended_plugins_after_external_login(
         .into_iter()
         .filter(|text| text.starts_with("<recommended_plugins>"))
         .collect::<Vec<_>>();
-    assert!(
-        recommendations.is_empty(),
-        "login must not prefetch remote recommendations"
-    );
-    assert!(
-        server
-            .received_requests()
-            .await
-            .expect("requests")
-            .iter()
-            .all(|request| { !request.url.path().contains("/ps/plugins/") })
-    );
+    assert_eq!(recommendations.is_empty(), !remote_features);
+    if remote_features {
+        assert!(recommendations.iter().any(|text| text.contains("GitHub (github@openai-curated-remote)")));
+    }
+    assert_eq!(std::fs::read(&config_path)?, original_config);
+    assert_eq!(std::fs::read(&local_skill)?, original_skill);
+    assert!(!codex_home.path().join("plugins/cache/openai-curated-remote").exists());
+    assert!(server.received_requests().await.expect("requests").iter().all(|request| {
+        request.url.path() != "/bundle"
+    }));
     let body = request.body_json();
     let tool_names = body
         .get("tools")
