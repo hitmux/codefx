@@ -6147,7 +6147,10 @@ plugins = true
     let mode = manager
         .recommended_plugins_mode_for_config(&config, Some(&auth))
         .await;
-    assert_eq!(manager.cached_recommended_plugins_mode(&cache_key), Some(mode.clone()));
+    assert_eq!(
+        manager.cached_recommended_plugins_mode(&cache_key),
+        Some(mode.clone())
+    );
     assert_eq!(
         mode,
         RecommendedPluginsMode::Endpoint {
@@ -7505,8 +7508,15 @@ async fn account_changes_never_start_plugin_sync_even_with_remote_features_enabl
     let skill = codex_home.path().join("skills/local/SKILL.md");
     write_file(&skill, "local skill must survive account changes");
     let plugin_root = codex_home.path().join("plugins/cache/local/sample/local");
-    write_plugin(&codex_home.path().join("plugins/cache/local"), "sample/local", "sample");
-    write_file(&plugin_root.join(".mcp.json"), r#"{"mcpServers":{"local-tool":{"command":"echo"}}}"#);
+    write_plugin(
+        &codex_home.path().join("plugins/cache/local"),
+        "sample/local",
+        "sample",
+    );
+    write_file(
+        &plugin_root.join(".mcp.json"),
+        r#"{"mcpServers":{"local-tool":{"command":"echo"}}}"#,
+    );
     let plugin_skill = plugin_root.join("skills/SKILL.md");
     let original_plugin_skill = fs::read(&plugin_skill).unwrap();
     let server = MockServer::start().await;
@@ -7519,12 +7529,20 @@ async fn account_changes_never_start_plugin_sync_even_with_remote_features_enabl
         Arc::clone(&auth_manager),
     ));
     let (warnings, mut received_warnings) = tokio::sync::mpsc::unbounded_channel();
-    for mode in [None, Some(AuthMode::Chatgpt), Some(AuthMode::ChatgptAuthTokens), None] {
+    for mode in [
+        None,
+        Some(AuthMode::Chatgpt),
+        Some(AuthMode::ChatgptAuthTokens),
+        None,
+    ] {
         set_test_auth_mode(&auth_manager, mode).await;
         let loaded = manager.plugins_for_config(&config).await;
         assert_eq!(loaded.plugins().len(), 1);
         assert_eq!(loaded.plugins()[0].config_name, "sample@local");
-        assert_eq!(sorted_effective_mcp_server_names(&loaded), vec!["local-tool".to_string()]);
+        assert_eq!(
+            sorted_effective_mcp_server_names(&loaded),
+            vec!["local-tool".to_string()]
+        );
         assert_eq!(loaded.effective_plugin_skill_roots().len(), 1);
         assert_eq!(fs::read(&plugin_skill).unwrap(), original_plugin_skill);
         let auth = auth_manager.auth_cached();
@@ -7542,11 +7560,22 @@ async fn account_changes_never_start_plugin_sync_even_with_remote_features_enabl
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert!(server.received_requests().await.unwrap().is_empty());
     assert_eq!(fs::read_to_string(&config_path).unwrap(), original_config);
-    assert_eq!(fs::read_to_string(&skill).unwrap(), "local skill must survive account changes");
+    assert_eq!(
+        fs::read_to_string(&skill).unwrap(),
+        "local skill must survive account changes"
+    );
     assert!(!codex_home.path().join(".tmp/plugins").exists());
-    assert!(!codex_home.path().join("plugins/cache/openai-curated-remote").exists());
+    assert!(
+        !codex_home
+            .path()
+            .join("plugins/cache/openai-curated-remote")
+            .exists()
+    );
     assert!(received_warnings.try_recv().is_err());
-    let _guard = manager.acquire_remote_installed_plugin_sync_guard().await.unwrap();
+    let _guard = manager
+        .acquire_remote_installed_plugin_sync_guard()
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

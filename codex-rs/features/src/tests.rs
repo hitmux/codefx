@@ -582,14 +582,22 @@ fn apps_require_feature_flag_and_chatgpt_auth() {
 fn account_integrations_require_explicit_feature_opt_in() {
     let mut features = Features::with_defaults();
     for feature in [Feature::Apps, Feature::RemotePlugin, Feature::PluginSharing] {
-        assert!(!features.enabled(feature), "{} must default off", feature.key());
+        assert!(
+            !features.enabled(feature),
+            "{} must default off",
+            feature.key()
+        );
     }
     let config: FeaturesToml =
         toml::from_str("apps = true\nremote_plugin = true\nplugin_sharing = true\n")
             .expect("explicit feature settings");
     features.apply_toml(&config);
     for feature in [Feature::Apps, Feature::RemotePlugin, Feature::PluginSharing] {
-        assert!(features.enabled(feature), "{} can be explicitly enabled", feature.key());
+        assert!(
+            features.enabled(feature),
+            "{} can be explicitly enabled",
+            feature.key()
+        );
     }
 }
 

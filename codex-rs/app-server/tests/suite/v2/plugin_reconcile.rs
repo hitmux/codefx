@@ -25,11 +25,16 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 #[test_case(false; "remote_features_disabled")]
 #[test_case(true; "remote_features_enabled")]
 #[tokio::test]
-async fn login_and_reconcile_preserve_local_plugins_and_skills(remote_features: bool) -> Result<()> {
+async fn login_and_reconcile_preserve_local_plugins_and_skills(
+    remote_features: bool,
+) -> Result<()> {
     let server = MockServer::start().await;
     let codex_home = TempDir::new()?;
     let mut config = MockResponsesConfig::new(&server.uri())
-        .with_root_config(&format!("chatgpt_base_url = '{}/backend-api/'", server.uri()))
+        .with_root_config(&format!(
+            "chatgpt_base_url = '{}/backend-api/'",
+            server.uri()
+        ))
         .enable_feature(Feature::Plugins);
     for feature in [Feature::Apps, Feature::RemotePlugin, Feature::PluginSharing] {
         config = if remote_features {
@@ -48,7 +53,9 @@ async fn login_and_reconcile_preserve_local_plugins_and_skills(remote_features: 
         AuthCredentialsStoreMode::File,
     )?;
     let skill = codex_home.path().join("skills/local/SKILL.md");
-    let plugin = codex_home.path().join("plugins/cache/local/sample/local/.codex-plugin/plugin.json");
+    let plugin = codex_home
+        .path()
+        .join("plugins/cache/local/sample/local/.codex-plugin/plugin.json");
     for (file, content) in [(&skill, "local skill"), (&plugin, "{\"name\":\"sample\"}")] {
         std::fs::create_dir_all(file.parent().unwrap())?;
         std::fs::write(file, content)?;
@@ -60,7 +67,10 @@ async fn login_and_reconcile_preserve_local_plugins_and_skills(remote_features: 
         .with_env_overrides(&[("OPENAI_API_KEY", None)])
         .build_initialized_with_timeout(DEFAULT_TIMEOUT)
         .await?;
-    for (account, reason) in [("account-one", "startup"), ("account-two", "account_changed")] {
+    for (account, reason) in [
+        ("account-one", "startup"),
+        ("account-two", "account_changed"),
+    ] {
         let token = encode_id_token(
             &ChatGptIdTokenClaims::new()
                 .email("local@example.test")
@@ -68,9 +78,14 @@ async fn login_and_reconcile_preserve_local_plugins_and_skills(remote_features: 
                 .chatgpt_account_id(account),
         )?;
         let login = app_server
-            .send_chatgpt_auth_tokens_login_request(token, account.into(), Some("enterprise".into()))
+            .send_chatgpt_auth_tokens_login_request(
+                token,
+                account.into(),
+                Some("enterprise".into()),
+            )
             .await?;
-        let _: LoginAccountResponse = timeout(DEFAULT_TIMEOUT, app_server.read_response(login)).await??;
+        let _: LoginAccountResponse =
+            timeout(DEFAULT_TIMEOUT, app_server.read_response(login)).await??;
         let reconcile = app_server
             .send_raw_request("plugin/reconcile", Some(json!({"reason": reason})))
             .await?;
@@ -79,12 +94,27 @@ async fn login_and_reconcile_preserve_local_plugins_and_skills(remote_features: 
         assert_eq!(response, PluginReconcileResponse::default());
         assert_eq!(std::fs::read_to_string(&skill)?, "local skill");
         assert_eq!(std::fs::read_to_string(&plugin)?, "{\"name\":\"sample\"}");
-        assert_eq!(std::fs::read(codex_home.path().join("config.toml"))?, original_config);
+        assert_eq!(
+            std::fs::read(codex_home.path().join("config.toml"))?,
+            original_config
+        );
     }
     assert!(!codex_home.path().join(".tmp/plugins").exists());
-    assert!(!codex_home.path().join("plugins/cache/openai-curated-remote").exists());
-    assert!(server.received_requests().await.unwrap().iter().all(|request| {
-        !request.url.path().contains("/ps/plugins/") && request.url.path() != "/bundle"
-    }));
+    assert!(
+        !codex_home
+            .path()
+            .join("plugins/cache/openai-curated-remote")
+            .exists()
+    );
+    assert!(
+        server
+            .received_requests()
+            .await
+            .unwrap()
+            .iter()
+            .all(|request| {
+                !request.url.path().contains("/ps/plugins/") && request.url.path() != "/bundle"
+            })
+    );
     Ok(())
 }

@@ -36,6 +36,29 @@ type SuccessfulTlsFallbackServer = (
 );
 
 #[tokio::test]
+async fn native_transport_protocol_error_remains_recognizable() {
+    let (url, attempts, stop_server) =
+        spawn_protocol_version_rejection_server(/*maximum_attempts*/ 1).unwrap();
+    let error = reqwest::Client::builder()
+        .use_native_tls()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .expect_err("protocol rejection");
+    let _ = stop_server.send(());
+    assert_eq!(attempts.recv().unwrap().unwrap(), 1);
+    assert!(should_retry_with_rustls(&error), "raw native TLS error: {error:?}");
+    assert!(
+        std::env::var_os("CODEX_CA_CERTIFICATE").is_none()
+            && std::env::var_os("SSL_CERT_FILE").is_none(),
+        "native TLS fixture must not inherit custom CA settings"
+    );
+}
+
+#[tokio::test]
 async fn default_pool_does_not_retry_a_native_tls_protocol_failure() {
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)

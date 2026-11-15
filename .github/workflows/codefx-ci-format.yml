@@ -10,9 +10,30 @@ on:
       - scripts/install/*.py
       - sdk/typescript/**
   workflow_dispatch:
+    inputs:
+      http_regressions:
+        description: Run focused HTTP transport regressions on the selected source
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
+  http-regressions:
+    if: github.event_name == 'workflow_dispatch' && inputs.http_regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - name: Check HTTP transport behavior independently of workspace tests
+        working-directory: codex-rs
+        env:
+          CARGO_BUILD_JOBS: "2"
+          CARGO_PROFILE_DEV_DEBUG: "0"
+          RUST_BACKTRACE: "1"
+        run: cargo test --locked -p codex-http-client --lib
   cargo-suggestions:
     name: Cargo lockfile and Rust formatting suggestions
     runs-on: ubuntu-24.04
