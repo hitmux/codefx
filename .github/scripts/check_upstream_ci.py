@@ -169,7 +169,9 @@ def linux_projection(path: str, text: str) -> str:
         text = text.replace(
             "      - name: tests\n", LINUX_COMPATIBILITY_STEP + "      - name: tests\n"
         )
-        helper_chmod = '            chmod +x "${helper_target_dir}/codex-linux-sandbox"\n'
+        helper_chmod = (
+            '            chmod +x "${helper_target_dir}/codex-linux-sandbox"\n'
+        )
         text = text.replace(helper_chmod, helper_chmod + LINUX_RUNTIME_RESTORE)
     if name == "rust-ci-full-nextest-platform.yml":
         text = text.replace(
@@ -403,7 +405,8 @@ def main():
         raise SystemExit("\n".join(errors))
     print(f"Official Linux CI matches {manifest['tag']} ({manifest['commit']})")
     print(
-        "Fast Cargo, SDK and Codefx coverage is required; full Bazel remains extended."
+        "Official Linux Bazel, workspace argument lint, Cargo, SDK and Codefx "
+        "coverage is required."
     )
 
 

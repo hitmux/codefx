@@ -12,7 +12,7 @@ class LinuxProjection(unittest.TestCase):
         path = ".github/workflows/rust-ci-full-nextest-platform.yml"
         official = (
             "      - name: Build nextest archive\n"
-            '        run: cargo nextest archive --workspace\n'
+            "        run: cargo nextest archive --workspace\n"
             '            cp "${CARGO_TARGET_DIR}/${CODEX_CI_TARGET}/${CODEX_CI_PROFILE}/codex-linux-sandbox" "${helper_dir}/"\n'
             "      - name: tests\n"
             '            chmod +x "${helper_target_dir}/codex-linux-sandbox"\n'
