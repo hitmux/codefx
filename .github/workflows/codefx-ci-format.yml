@@ -27,13 +27,21 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - name: Reuse Cargo download inputs
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-sources-v2-${{ runner.os }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
       - name: Check HTTP transport behavior independently of workspace tests
         working-directory: codex-rs
         env:
           CARGO_BUILD_JOBS: "2"
           CARGO_PROFILE_DEV_DEBUG: "0"
           RUST_BACKTRACE: "1"
-        run: cargo test --locked -p codex-http-client --lib
+        run: cargo test --locked -p codex-http-client --lib -- --test-threads=1
   cargo-suggestions:
     name: Cargo lockfile and Rust formatting suggestions
     runs-on: ubuntu-24.04
