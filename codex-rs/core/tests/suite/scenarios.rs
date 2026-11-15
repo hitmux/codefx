@@ -1583,7 +1583,7 @@ async fn matched_response_mocks_capture_only_the_selected_thread() -> Result<()>
             };
             routes.push((thread, capture));
         }
-        let client = reqwest::Client::builder().no_proxy().build()?;
+        let client = codex_http_client::HttpClientBuilder::new().build_direct()?;
         for (thread, _) in &routes {
             client
                 .post(format!("{}/responses", server.uri()))
