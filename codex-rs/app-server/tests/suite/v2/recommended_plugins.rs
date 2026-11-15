@@ -199,10 +199,18 @@ async fn recommended_plugins_after_external_login(
         .into_iter()
         .filter(|text| text.starts_with("<recommended_plugins>"))
         .collect::<Vec<_>>();
-    assert!(recommendations.is_empty(), "login must not prefetch remote recommendations");
-    assert!(server.received_requests().await.expect("requests").iter().all(|request| {
-        !request.url.path().contains("/ps/plugins/")
-    }));
+    assert!(
+        recommendations.is_empty(),
+        "login must not prefetch remote recommendations"
+    );
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("requests")
+            .iter()
+            .all(|request| { !request.url.path().contains("/ps/plugins/") })
+    );
     let body = request.body_json();
     let tool_names = body
         .get("tools")

@@ -486,7 +486,12 @@ async fn skills_list_preserves_configured_cached_plugin_without_account_sync() -
     )?;
     let config_path = codex_home.path().join("config.toml");
     let config = std::fs::read_to_string(&config_path)?;
-    std::fs::write(&config_path, format!("{config}remote_plugin = true\nplugin_sharing = true\napps = true\n\n[plugins.\"linear@openai-curated-remote\"]\nenabled = true\n"))?;
+    std::fs::write(
+        &config_path,
+        format!(
+            "{config}remote_plugin = true\nplugin_sharing = true\napps = true\n\n[plugins.\"linear@openai-curated-remote\"]\nenabled = true\n"
+        ),
+    )?;
     let original_config = std::fs::read(&config_path)?;
     write_chatgpt_auth(
         codex_home.path(),
@@ -502,26 +507,51 @@ async fn skills_list_preserves_configured_cached_plugin_without_account_sync() -
         .build_initialized_with_timeout(DEFAULT_TIMEOUT)
         .await?;
     for force_reload in [true, false, true] {
-        let request_id = mcp.send_skills_list_request(SkillsListParams {
-            cwds: vec![cwd.path().to_path_buf()],
-            force_reload,
-        }).await?;
-        let SkillsListResponse { data } = timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
+        let request_id = mcp
+            .send_skills_list_request(SkillsListParams {
+                cwds: vec![cwd.path().to_path_buf()],
+                force_reload,
+            })
+            .await?;
+        let SkillsListResponse { data } =
+            timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
         assert_eq!(data.len(), 1);
         assert_eq!(data[0].errors, Vec::new());
-        let skill = data[0].skills.iter().find(|skill| skill.name == "linear:triage-issues")
+        let skill = data[0]
+            .skills
+            .iter()
+            .find(|skill| skill.name == "linear:triage-issues")
             .expect("configured cached plugin remains available without remote refresh");
-        assert_eq!(std::fs::canonicalize(skill.path.as_str())?, expected_skill_path);
-        assert_eq!((skill.enabled, skill.plugin_id.as_deref()), (true, Some("linear@openai-curated-remote")));
-        let request_id = mcp.send_raw_request("plugin/reconcile", Some(serde_json::json!({}))).await?;
-        let response: codex_app_server_protocol::PluginReconcileResponse = timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
-        assert_eq!(response, codex_app_server_protocol::PluginReconcileResponse::default());
+        assert_eq!(
+            std::fs::canonicalize(skill.path.as_str())?,
+            expected_skill_path
+        );
+        assert_eq!(
+            (skill.enabled, skill.plugin_id.as_deref()),
+            (true, Some("linear@openai-curated-remote"))
+        );
+        let request_id = mcp
+            .send_raw_request("plugin/reconcile", Some(serde_json::json!({})))
+            .await?;
+        let response: codex_app_server_protocol::PluginReconcileResponse =
+            timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
+        assert_eq!(
+            response,
+            codex_app_server_protocol::PluginReconcileResponse::default()
+        );
     }
     assert_eq!(std::fs::read(&expected_skill_path)?, original_skill);
     assert_eq!(std::fs::read(&config_path)?, original_config);
-    assert!(server.received_requests().await.expect("requests").iter().all(|request| {
-        !request.url.path().contains("/ps/plugins/") && request.url.path() != "/bundle"
-    }));
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("requests")
+            .iter()
+            .all(|request| {
+                !request.url.path().contains("/ps/plugins/") && request.url.path() != "/bundle"
+            })
+    );
     Ok(())
 }
 

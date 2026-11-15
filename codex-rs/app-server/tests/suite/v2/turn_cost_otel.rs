@@ -145,39 +145,44 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
     } else {
         EnvironmentManager::default_for_tests()
     };
-    let mut client = timeout(Duration::from_secs(20), in_process::start(InProcessStartArgs {
-        arg0_paths: Arg0DispatchPaths::default(),
-        config,
-        cli_overrides: Vec::new(),
-        loader_overrides,
-        strict_config: false,
-        cloud_config_bundle: CloudConfigBundleLoader::default(),
-        embedded_network_policy: Default::default(),
-        thread_config_loader: Arc::new(NoopThreadConfigLoader),
-        feedback: CodexFeedback::new(),
-        log_db: None,
-        state_db: None,
-        environment_manager: Arc::new(environment_manager),
-        config_warnings: Vec::new(),
-        session_source: SessionSource::Cli,
-        enable_codex_api_key_env: false,
-        initialize: InitializeParams {
-            client_info: ClientInfo {
-                name: "codex-app-server-tests".to_string(),
-                title: None,
-                version: "test".to_string(),
+    let mut client = timeout(
+        Duration::from_secs(20),
+        in_process::start(InProcessStartArgs {
+            arg0_paths: Arg0DispatchPaths::default(),
+            config,
+            cli_overrides: Vec::new(),
+            loader_overrides,
+            strict_config: false,
+            cloud_config_bundle: CloudConfigBundleLoader::default(),
+            embedded_network_policy: Default::default(),
+            thread_config_loader: Arc::new(NoopThreadConfigLoader),
+            feedback: CodexFeedback::new(),
+            log_db: None,
+            state_db: None,
+            environment_manager: Arc::new(environment_manager),
+            config_warnings: Vec::new(),
+            session_source: SessionSource::Cli,
+            enable_codex_api_key_env: false,
+            initialize: InitializeParams {
+                client_info: ClientInfo {
+                    name: "codex-app-server-tests".to_string(),
+                    title: None,
+                    version: "test".to_string(),
+                },
+                capabilities: Some(InitializeCapabilities {
+                    experimental_api: true,
+                    ..Default::default()
+                }),
             },
-            capabilities: Some(InitializeCapabilities {
-                experimental_api: true,
-                ..Default::default()
-            }),
-        },
-        channel_capacity: in_process::DEFAULT_IN_PROCESS_CHANNEL_CAPACITY,
-    }))
-    .await.context("in-process startup timed out")??;
+            channel_capacity: in_process::DEFAULT_IN_PROCESS_CHANNEL_CAPACITY,
+        }),
+    )
+    .await
+    .context("in-process startup timed out")??;
     wait_for_cost_queries(&server, /*count*/ 1).await;
-    let response = timeout(Duration::from_secs(20), client
-        .request(ClientRequest::ThreadStart {
+    let response = timeout(
+        Duration::from_secs(20),
+        client.request(ClientRequest::ThreadStart {
             request_id: RequestId::Integer(1),
             params: ThreadStartParams {
                 environments: Some(vec![TurnEnvironmentParams {
@@ -187,12 +192,15 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
                 }]),
                 ..Default::default()
             },
-        }))
-        .await.context("thread/start timed out")??
-        .expect("thread/start");
+        }),
+    )
+    .await
+    .context("thread/start timed out")??
+    .expect("thread/start");
     let ThreadStartResponse { thread, .. } = serde_json::from_value(response)?;
-    let response = timeout(Duration::from_secs(20), client
-        .request(ClientRequest::TurnStart {
+    let response = timeout(
+        Duration::from_secs(20),
+        client.request(ClientRequest::TurnStart {
             request_id: RequestId::Integer(2),
             params: TurnStartParams {
                 thread_id: thread.id.clone(),
@@ -202,9 +210,11 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
                 }],
                 ..Default::default()
             },
-        }))
-        .await.context("turn/start timed out")??
-        .expect("turn/start");
+        }),
+    )
+    .await
+    .context("turn/start timed out")??
+    .expect("turn/start");
     let TurnStartResponse { turn } = serde_json::from_value(response)?;
     timeout(Duration::from_secs(/*secs*/ 20), async {
         while let Some(event) = client.next_event().await {
@@ -220,7 +230,8 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
             }
         }
     })
-    .await.context("model turn did not complete")?;
+    .await
+    .context("model turn did not complete")?;
     assert_eq!(
         model.single_request().header("authorization").as_deref(),
         Some("Bearer siwc-token")
@@ -244,12 +255,20 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
             tokio::task::yield_now().await;
         }
     })
-    .await.context("turn cost metric was not recorded")?;
+    .await
+    .context("turn cost metric was not recorded")?;
     tokio::time::pause();
     tokio::time::advance(Duration::from_secs(/*secs*/ 301)).await;
     tokio::time::resume();
-    timeout(Duration::from_secs(10), client.shutdown()).await.context("app-server shutdown timed out")??;
-    timeout(Duration::from_secs(10), tokio::task::spawn_blocking(move || provider.shutdown())).await.context("OTLP shutdown timed out")??;
+    timeout(Duration::from_secs(10), client.shutdown())
+        .await
+        .context("app-server shutdown timed out")??;
+    timeout(
+        Duration::from_secs(10),
+        tokio::task::spawn_blocking(move || provider.shutdown()),
+    )
+    .await
+    .context("OTLP shutdown timed out")??;
     let mut points = Vec::new();
     for request in collector.received_requests().await.expect("OTLP requests") {
         let body: Value = serde_json::from_slice(&request.body)?;
