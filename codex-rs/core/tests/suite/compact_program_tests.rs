@@ -80,6 +80,7 @@ async fn submit_pair(
 #[test_case(Compaction::LocalHash, History::ApiKeyCustomProviderResume, Some(CyberAccessProgram::DaybreakBlue); "api key custom provider local resume")]
 #[test_case(Compaction::RemoteHash, History::ApiKeyCustomProviderResume, Some(CyberAccessProgram::DaybreakBlue); "api key custom provider remote resume")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tracing_test::traced_test]
 async fn model_switch_program_pair(
     compaction: Compaction,
     history: History,

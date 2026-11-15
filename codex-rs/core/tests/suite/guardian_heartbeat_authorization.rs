@@ -11,6 +11,7 @@ use pretty_assertions::assert_eq;
 #[test_case::test_case(18, None; "bounded_user_history")]
 #[test_case::test_case(0, Some("Should I pause restarting until you give final approval?"); "filtered_assistant_question")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tracing_test::traced_test]
 async fn heartbeat_keeps_user_restriction_after_status_questions(
     unrelated_turns: usize,
     restriction_question: Option<&str>,
@@ -188,6 +189,7 @@ async fn heartbeat_keeps_user_restriction_after_status_questions(
 #[test_case::test_case(&[Feature::GuardianRootHandoffContext], 1; "handoff_filter_first")]
 #[test_case::test_case(&[Feature::GuardianRootHandoffContext], 3; "handoff_filter_repeated")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tracing_test::traced_test]
 async fn heartbeat_root_projection_uses_latest_turn_skills(
     enabled_features: &'static [Feature],
     heartbeat_count: usize,

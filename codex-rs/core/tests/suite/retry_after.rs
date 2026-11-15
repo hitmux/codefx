@@ -500,7 +500,7 @@ async fn exhausted_http_retries_preserve_deadline_through_error_mapping() {
 }
 
 /// Retry advice changes delays but never extends either retry budget or its displayed count.
-#[test_case::test_case(None, 2, 3; "without_advice")]
+#[test_case::test_case(None, 2, 9; "without_advice")]
 #[test_case::test_case(Some("0"), 0, 3; "advice_without_stream_retries")]
 #[test_case::test_case(Some("0"), 2, 9; "advice_with_stream_retries")]
 #[tokio::test(flavor = "current_thread")]
@@ -563,13 +563,9 @@ async fn responses_http_overload_respects_retry_limits(
     .expect("overload retries should finish the turn within 10 seconds");
 
     assert_eq!(error_events, 1);
-    let expected_messages = if retry_after.is_some() {
-        (1..=stream_max_retries)
-            .map(|retry| format!("Reconnecting... {retry}/{stream_max_retries}"))
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
+    let expected_messages = (1..=stream_max_retries)
+        .map(|retry| format!("Reconnecting... {retry}/{stream_max_retries}"))
+        .collect::<Vec<_>>();
     assert_eq!(reconnect_messages, expected_messages);
     let request_count = server
         .received_requests()
@@ -965,7 +961,7 @@ async fn compact_v2_overload_without_retry_after_exhausts_request_retries() -> R
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model_provider.request_max_retries = Some(2);
-            config.model_provider.stream_max_retries = Some(2);
+            config.model_provider.stream_max_retries = Some(0);
         })
         .build_with_auto_env(&server)
         .await?;
@@ -1823,7 +1819,7 @@ async fn websocket_upgrade_rejection_uses_retry_after() -> Result<()> {
         .respond_with(
             ResponseTemplate::new(/*s*/ 503)
                 .insert_header("Retry-After", "1")
-                .set_body_json(json!({ "error": { "code": "server_is_overloaded" } })),
+                .set_body_json(json!({ "error": { "code": "upstream_unavailable" } })),
         )
         .mount(&server)
         .await;
@@ -1864,7 +1860,8 @@ async fn websocket_upgrade_rejection_uses_retry_after() -> Result<()> {
     submit_user_input(&test, "retry the rejected websocket upgrade").await?;
     wait_for_turn_completion(&test).await;
 
-    // Both WebSocket advice deadlines apply, including the one before transport fallback.
+    // Transport failures honor both WebSocket deadlines before HTTPS fallback.
+    // Model-capacity failures are covered separately and must not switch transports.
     assert!(start.elapsed() >= Duration::from_secs(2));
     let requests = server.received_requests().await.unwrap_or_default();
     let methods = requests
