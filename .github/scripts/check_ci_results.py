@@ -15,6 +15,8 @@ def main() -> None:
     # Keep result policy in one script so blocking-ci and postmerge-ci cannot
     # drift in how they interpret dependency conclusions.
     needs = json.loads(os.environ["NEEDS"])
+    if not isinstance(needs, dict) or not needs:
+        raise SystemExit("CI aggregate has no dependencies")
     failures = sorted(
         (name, dependency["result"])
         for name, dependency in needs.items()

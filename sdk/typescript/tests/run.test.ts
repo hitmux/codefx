@@ -846,25 +846,32 @@ describe("Codex", () => {
     }
   });
   it("throws ThreadRunError on turn failures", async () => {
-    const { url, close } = await startResponsesTestProxy({
+    const { url, close, requests } = await startResponsesTestProxy({
       statusCode: 200,
-      responseBodies: (function* (): Generator<SseResponseBody> {
-        yield sse(responseStarted("response_1"));
-        while (true) {
-          yield sse(responseFailed("rate limit exceeded"));
-        }
-      })(),
+      responseBodies: [sse(responseStarted("response_1"), responseFailed("rate limit exceeded"))],
     });
-    const { client, cleanup } = createMockClient(url);
+    // This checks error propagation. Retry timing is covered by the Rust retry tests.
+    const { client, cleanup } = createMockClient(url, {
+      request_max_retries: 0,
+      stream_max_retries: 0,
+    });
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort("SDK failure test deadline"), 5000);
+    let run: Promise<unknown> | undefined;
 
     try {
       const thread = client.startThread();
-      await expect(thread.run("fail")).rejects.toThrow("stream disconnected before completion:");
+      run = thread.run("fail", { signal: controller.signal });
+      await expect(run).rejects.toThrow("rate limit exceeded");
+      expect(requests).toHaveLength(1);
     } finally {
+      clearTimeout(deadline);
+      controller.abort();
+      await run?.catch(() => {});
       cleanup();
       await close();
     }
-  }, 10000); // TODO(pakrym): remove timeout
+  }, 10000);
 });
 
 /**

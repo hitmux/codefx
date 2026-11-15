@@ -19,5 +19,8 @@ runs:
         cat >> "$HOME/.bazelrc" <<'EOF'
         build --local_resources=cpu=2
         build --local_resources=memory=4096
+        common --disk_cache=
         EOF
         echo 'CARGO_BUILD_JOBS=2' >> "$GITHUB_ENV"
+        echo 'CARGO_INCREMENTAL=0' >> "$GITHUB_ENV"
+        echo 'SCCACHE_CACHE_SIZE=2G' >> "$GITHUB_ENV"

@@ -35,10 +35,7 @@ jobs:
 
   sdks:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
-    environment:
-      name: bazel
-      deployment: false
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -63,61 +60,17 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
 
-      - name: Prepare Bazel CI
-        id: setup_bazel
-        uses: ./.github/actions/prepare-bazel-ci
+      - name: Download the same-run current source package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          target: x86_64-unknown-linux-gnu
-          cache-scope: sdk
+          name: codefx-source-x86_64-unknown-linux-musl
+          path: ${{ runner.temp }}/sdk-package
 
-      - name: Build codex and the code-mode host with Bazel
-        id: build_bazel
-        env:
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Use the shared CI wrapper so fork PRs fall back cleanly when
-          # BuildBuddy credentials are unavailable. This workflow needs the
-          # built binaries on disk afterwards, so ask the wrapper to override
-          # CI's default remote_download_minimal behavior.
-          ./.github/scripts/run-bazel-ci.sh \
-            --remote-download-toplevel \
-            -- \
-            build \
-            --build_metadata=COMMIT_SHA=${GITHUB_SHA} \
-            --build_metadata=TAG_job=sdk \
-            -- \
-            //codex-rs/cli:codex \
-            //codex-rs/code-mode-host:codex-code-mode-host
+      - name: Verify candidate provenance and stage SDK executables
+        run: python3 scripts/install/prepare_sdk_package.py --directory "$RUNNER_TEMP/sdk-package" --output "$RUNNER_TEMP/sdk-runtime"
 
-          cquery_output="$(
-            ./.github/scripts/run-bazel-ci.sh \
-              -- \
-              cquery \
-              --output=files \
-              -- \
-              'set(//codex-rs/cli:codex //codex-rs/code-mode-host:codex-code-mode-host)' \
-              | grep -E '^(/|bazel-out/)'
-          )"
-          mapfile -t bazel_output_paths <<< "${cquery_output}"
-          if [[ ${#bazel_output_paths[@]} -ne 2 ]]; then
-            echo "Expected both Bazel-built binaries, found ${#bazel_output_paths[@]}." >&2
-            exit 1
-          fi
-
-          # Stage both binaries together so the CLI can discover its sibling
-          # code-mode host while the SDK tests spawn the CLI directly.
-          install_dir="${GITHUB_WORKSPACE}/.tmp/sdk-ci"
-          mkdir -p "${install_dir}"
-          install -m 755 "${bazel_output_paths[@]}" "${install_dir}"
-          echo "CODEX_EXEC_PATH=${install_dir}/codex" >> "$GITHUB_ENV"
-
-      - name: Warm up Bazel-built codex
-        shell: bash
-        run: |
-          set -euo pipefail
-          "${CODEX_EXEC_PATH}" --version
+      - name: Warm up the current source CLI
+        run: '"${CODEX_EXEC_PATH}" --version'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -129,7 +82,7 @@ jobs:
         run: pnpm -r --filter ./sdk/typescript run lint
 
       - name: Test SDK packages
-        run: pnpm -r --filter ./sdk/typescript run test
+        run: pnpm -r --filter ./sdk/typescript run test -- --runInBand
 
       - name: Install uv
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
@@ -143,14 +96,6 @@ jobs:
           uv run --only-group dev --frozen --no-sync ruff check --output-format=github .
           uv run --only-group dev --frozen --no-sync ruff format --check .
           uv run --only-group dev --frozen --no-sync pytest
-
-      - name: Save bazel repository cache
-        if: always() && !cancelled() && steps.build_bazel.outcome == 'success' && steps.setup_bazel.outputs.repository-cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-        with:
-          path: ${{ steps.setup_bazel.outputs.repository-cache-path }}
-          key: ${{ steps.setup_bazel.outputs.repository-cache-key }}
 
       - name: Check for a clean worktree
         if: always() && !cancelled()

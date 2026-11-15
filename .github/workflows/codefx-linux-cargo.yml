@@ -1,0 +1,104 @@
+name: Codefx Linux Cargo coverage
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  cargo:
+    name: GNU ${{ matrix.task }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [clippy, core, tui, app-server, other-0, other-1, other-2]
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_CI_TEST_DEBUG: "0"
+      TARGET: x86_64-unknown-linux-gnu
+      RUST_BACKTRACE: "1"
+      RUST_MIN_STACK: "8388608"
+    defaults:
+      run:
+        working-directory: codex-rs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - uses: ./.github/actions/codefx-linux-voice-sdk
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: x86_64-unknown-linux-gnu
+          components: clippy
+      - name: Install Linux test dependencies
+        run: |
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends build-essential libcap-dev libasound2-dev bubblewrap
+      - uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: x86_64-unknown-linux-gnu
+      - name: Cache Cargo download inputs
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-sources-v2-${{ runner.os }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: cargo-nextest@0.9.103
+      - name: Resolve compatibility releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          releases="$(python3 ../.github/scripts/resolve_exec_server_releases.py)"
+          echo "CODEX_COMPAT_RELEASES=$releases" >> "$GITHUB_ENV"
+      - name: Clippy including test targets
+        if: matrix.task == 'clippy'
+        run: cargo clippy --locked --workspace --all-targets --target "$TARGET" -- -D warnings
+      - name: Select workspace packages before compilation
+        if: matrix.task != 'clippy'
+        env:
+          SHARD: ${{ matrix.task }}
+        run: |
+          set -euo pipefail
+          cargo metadata --locked --no-deps --format-version 1 |
+            python3 ../.github/scripts/select_cargo_ci_packages.py --shard "$SHARD" > "$RUNNER_TEMP/cargo-packages"
+      - name: Build the runtime sandbox helper
+        if: matrix.task != 'clippy'
+        run: |
+          cargo build --locked --profile ci-test --target "$TARGET" -p codex-linux-sandbox --bin codex-linux-sandbox
+          helper="$CARGO_TARGET_DIR/$TARGET/ci-test/codex-linux-sandbox"
+          echo "CARGO_BIN_EXE_codex-linux-sandbox=$helper" >> "$GITHUB_ENV"
+          echo "CARGO_BIN_EXE_codex_linux_sandbox=$helper" >> "$GITHUB_ENV"
+      - name: Run every selected package test
+        if: matrix.task != 'clippy'
+        run: |
+          set -euo pipefail
+          packages=()
+          while IFS= read -r package; do
+            packages+=(-p "$package")
+          done < "$RUNNER_TEMP/cargo-packages"
+          test "${#packages[@]}" -gt 0
+          cargo nextest run --locked --target "$TARGET" --cargo-profile ci-test --no-fail-fast --test-threads 2 "${packages[@]}"
+      - name: Record disk usage
+        if: always()
+        run: |
+          df -h "$GITHUB_WORKSPACE"
+          du -sh "$CARGO_TARGET_DIR" "$HOME/.cache/bazel-disk-cache" "$BAZEL_OUTPUT_BASE" 2>/dev/null || true
+      - name: Upload test reports
+        if: always() && matrix.task != 'clippy'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: codefx-cargo-junit-${{ matrix.task }}
+          path: ${{ env.CARGO_TARGET_DIR }}/nextest/default/junit.xml
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Check for a clean worktree
+        if: always() && !cancelled()
+        uses: ./.github/actions/check-clean-worktree

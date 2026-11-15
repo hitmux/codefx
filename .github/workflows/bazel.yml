@@ -28,8 +28,6 @@ jobs:
           # macOS
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-          - os: ubuntu-24.04
-            target: x86_64-unknown-linux-musl
           # 2026-02-27 Bazel tests have been flaky on arm in CI.
           # Disable until we can investigate and stabilize them.
           # - os: ubuntu-24.04-arm
@@ -40,7 +38,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     # Configure a human readable name for each job
-    name: Bazel test on ${{ matrix.os }} for ${{ matrix.target }}
+    name: Bazel native GNU tests on ${{ matrix.os }}
     environment:
       name: bazel
       deployment: false

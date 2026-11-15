@@ -1,35 +1,29 @@
 # Codefx Linux CI
 
-The fork uses the official CI for the corresponding Codex release, retains its
-Linux checks and adds Codefx checks. The immutable baseline and permitted runner
-adaptations are documented in [CI_POLICY.md](../CI_POLICY.md).
+All validation runs in GitHub Actions. See [CI_POLICY.md](../CI_POLICY.md) for
+the immutable upstream baseline, coverage requirements and allowed adaptations.
 
-## Pull requests
+`blocking-ci.yml` validates the PR merge revision and produces `CI required`.
+It requires fast Rust checks, complete GNU Cargo package test coverage and Clippy,
+SDK tests, dependency/repository policy, installer safety and current-source
+x86_64/ARM64 musl packages. Failed, cancelled or unexpectedly skipped dependencies
+fail the aggregate.
 
-`blocking-ci.yml` checks GitHub's synthetic merge commit. Its `CI required`
-result requires the official Bazel tests, Clippy and release build checks,
-fast Rust checks, SDK checks, dependency policy and repository checks, plus
-Codefx baseline policy, installer safety and current-source native packages.
-A job with a deleted command or a credential-dependent skip is not equivalent
-to the official check. The baseline guard verifies the retained implementations.
+`codefx-linux-cargo.yml` partitions workspace packages before compilation so a
+single runner does not link and archive the complete workspace. It retains core
+retry, TUI/update and app-server tests. It runs tests directly with nextest.
 
-`codefx-source-smoke.yml` builds Linux x86_64 and ARM64 musl packages from the
-same revision and installs the actual native executables. It has no publication
-permissions and never substitutes an older published package for the candidate.
-`codefx-native-smoke.yml` separately verifies explicitly selected published tags;
-that result does not validate current source.
+`codefx-source-smoke.yml` builds and installs the actual candidate packages.
+`sdk.yml` consumes the successful same-run x86_64 package after checking its source,
+version, target and digest. It does not rebuild the CLI or reuse a published tag.
+`codefx-native-smoke.yml` checks published releases separately.
 
-## Full Linux verification
+`codefx-extended-ci.yml` runs the full Bazel graph on main or manually, outside
+`CI required`. `postmerge-ci.yml` retains full Linux Cargo and V8 validation.
+Full Cargo includes the workspace argument-comment lint and remote-environment
+tests, and also supports manual execution and `full-ci` branches.
 
-`postmerge-ci.yml` calls `rust-ci-full.yml` and `v8-canary.yml` on main.
-The full Rust workflow preserves the official Linux Cargo Clippy/release matrix,
-nextest archive/shard coverage and remote-environment tests. It also supports
-manual runs and branches containing `full-ci` for verification before merge.
-Windows/macOS jobs are removed; private Linux runners use hosted Ubuntu.
-
-On an upstream sync, update the source version, baseline manifest, pinned
-checkout and official CI/helper files together. CI rejects unexpected drift.
-Run full Linux CI and release package validation before publication.
-
-All verification and formatting runs in GitHub Actions. Locally, edit files
-and review static Git differences only.
+For an upstream upgrade or release, run full Linux validation and both native
+package checks on the final candidate. A green fast gate is not a full CI pass.
+Use Actions run links and exact commits when reporting results. Branch protection
+must explicitly require the aggregate; workflows do not configure it themselves.

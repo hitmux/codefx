@@ -32,17 +32,23 @@ jobs:
           persist-credentials: false
       - name: Test CI coverage and baseline guard
         run: python3 -m unittest discover -s .github/scripts -p test_upstream_ci.py -v
+      - name: Validate changed workflow syntax
+        run: >-
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          -shellcheck= -pyflakes=
+          .github/workflows/blocking-ci.yml
+          .github/workflows/codefx-linux-cargo.yml
+          .github/workflows/codefx-extended-ci.yml
+          .github/workflows/sdk.yml
+      - name: Test CI resource and provenance regressions
+        run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_codefx_ci.py' -v
+          python3 -m unittest discover -s scripts/install -p 'test_prepare_sdk_package.py' -v
       - name: Verify Linux-only upstream CI wiring
         run: python3 .github/scripts/check_upstream_ci.py --upstream .tmp/upstream-ci
 
   # Keep reusable workflow calls alphabetized. The required job below is the
   # version-controlled list that the main-branch ruleset should require.
-  bazel:
-    name: Bazel
-    needs: ci-policy
-    uses: ./.github/workflows/bazel.yml
-    secrets: inherit
-
   blob-size-policy:
     name: Blob size policy
     uses: ./.github/workflows/blob-size-policy.yml
@@ -83,9 +89,14 @@ jobs:
     uses: ./.github/workflows/rust-ci.yml
     secrets: inherit
 
+  linux-cargo:
+    name: Linux Cargo coverage
+    needs: ci-policy
+    uses: ./.github/workflows/codefx-linux-cargo.yml
+
   sdk:
     name: SDK
-    needs: ci-policy
+    needs: [ci-policy, codefx-source-smoke]
     uses: ./.github/workflows/sdk.yml
     secrets: inherit
 
@@ -96,7 +107,7 @@ jobs:
     if: ${{ always() }}
     needs:
       - ci-policy
-      - bazel
+      - linux-cargo
       - blob-size-policy
       - cargo-deny
       - codefx-install

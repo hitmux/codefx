@@ -663,9 +663,11 @@ lto = false
 strip = false
 
 [profile.ci-test]
-# Reduce binary size to reduce disk pressure.
+# Keep test binaries and nextest archives within hosted-runner disk budgets.
 inherits = "test"
 opt-level = 0
+debug = 0
+incremental = false
 
 [patch.crates-io]
 # Codefx security backport: widen SQLite range until SQLx publishes the upstream fix.

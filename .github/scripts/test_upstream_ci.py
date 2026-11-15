@@ -130,13 +130,13 @@ class RequiredGate(unittest.TestCase):
     def test_all_current_checks_are_required(self):
         self.assertEqual(policy.gate_errors(self.blocking), [])
 
-    def test_disconnected_bazel_or_sdk_cannot_pass(self):
-        for job in ("bazel", "sdk"):
+    def test_disconnected_cargo_or_sdk_cannot_pass(self):
+        for job in ("linux-cargo", "sdk"):
             with self.subTest(job=job):
                 weakened = self.blocking.replace(f"      - {job}\n", "")
                 self.assertTrue(policy.gate_errors(weakened))
                 weakened = self.blocking.replace(
-                    f"uses: ./.github/workflows/{job}.yml",
+                    f"uses: ./.github/workflows/{'codefx-linux-cargo' if job == 'linux-cargo' else job}.yml",
                     "uses: ./.github/workflows/rust-ci.yml",
                 )
                 self.assertTrue(policy.gate_errors(weakened))
@@ -145,6 +145,13 @@ class RequiredGate(unittest.TestCase):
         for condition in ("if: false", "continue-on-error: true"):
             weakened = self.blocking.replace("  sdk:\n", f"  sdk:\n    {condition}\n")
             self.assertTrue(policy.gate_errors(weakened))
+
+    def test_required_coverage_is_preserved(self):
+        self.assertEqual(policy.coverage_errors(policy.ROOT), [])
+
+    def test_sdk_cannot_use_a_package_without_a_successful_producer(self):
+        weakened = self.blocking.replace("needs: [ci-policy, codefx-source-smoke]", "needs: ci-policy")
+        self.assertTrue(policy.gate_errors(weakened))
 
     def test_terminal_gate_cannot_be_skipped_after_failure(self):
         weakened = self.blocking.replace("    if: ${{ always() }}\n", "")

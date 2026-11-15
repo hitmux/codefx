@@ -35,9 +35,10 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: codefx-source-${{ matrix.target }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-sources-v2-${{ runner.os }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.14.0
@@ -59,6 +60,28 @@ jobs:
           export CODEX_BWRAP_SHA256="$(sha256sum "$sandbox" | cut -d ' ' -f 1)"
           cargo build --locked --release --target "$TARGET" \
             --bin codex --bin codex-code-mode-host --bin codex-exec-server
+      - name: Confirm native architecture and musl linkage
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$TARGET" in
+            x86_64-unknown-linux-musl) machine='Advanced Micro Devices X86-64' ;;
+            aarch64-unknown-linux-musl) machine='AArch64' ;;
+            *) exit 1 ;;
+          esac
+          for name in codex codex-code-mode-host codex-exec-server bwrap; do
+            binary="$CARGO_TARGET_DIR/$TARGET/release/$name"
+            readelf -h "$binary" | grep -F "$machine"
+            if readelf -l "$binary" | grep -q 'ld-linux'; then
+              echo "Unexpected glibc interpreter in $name" >&2
+              exit 1
+            fi
+          done
+      - name: Record build disk usage
+        if: always()
+        run: |
+          df -h "$GITHUB_WORKSPACE"
+          du -sh "$CARGO_TARGET_DIR" "$BAZEL_OUTPUT_BASE" 2>/dev/null || true
       - name: Assemble current source package
         shell: bash
         run: |
