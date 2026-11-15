@@ -36,8 +36,8 @@ jobs:
           # Ordinary validation keeps --locked and rejects any worktree drift.
           cargo metadata --format-version 1 > "$RUNNER_TEMP/codefx-cargo-metadata.json"
           cargo metadata --locked --offline --format-version 1 > /dev/null
-          cargo fmt --package codex-v8-poc -- --config imports_granularity=Item
-          git diff --binary -- Cargo.lock v8-poc/src/lib.rs > "$RUNNER_TEMP/codefx-cargo-repair.patch"
+          cargo fmt --all -- --config imports_granularity=Item
+          git diff --binary -- . > "$RUNNER_TEMP/codefx-cargo-repair.patch"
           git diff --stat
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:

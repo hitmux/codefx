@@ -37,6 +37,7 @@ async fn cloud_list_only_allows_trusted_credential_destinations() -> Result<()> 
         command
             .current_dir(codex_home.path())
             .env("CODEX_HOME", codex_home.path())
+            .env("RUST_LIB_BACKTRACE", "0")
             .env_remove("CODEX_ACCESS_TOKEN")
             .env_remove("OPENAI_API_KEY")
             .env_remove("CODEX_CLOUD_TASKS_MODE")

@@ -20,6 +20,7 @@ jobs:
       CARGO_PROFILE_CI_TEST_DEBUG: "0"
       TARGET: x86_64-unknown-linux-gnu
       RUST_BACKTRACE: "1"
+      RUST_LOG: codex_exec_server=warn
       RUST_MIN_STACK: "8388608"
     defaults:
       run:
@@ -72,12 +73,20 @@ jobs:
       - name: Build workspace runtime executables
         if: matrix.task != 'clippy'
         run: |
+          cargo build --locked --profile ci-test --target "$TARGET" --bin bwrap
+          runtime="$CARGO_TARGET_DIR/$TARGET/ci-test"
+          export CODEX_BWRAP_SHA256="$(sha256sum "$runtime/bwrap" | cut -d ' ' -f 1)"
+          echo "CODEX_BWRAP_SHA256=$CODEX_BWRAP_SHA256" >> "$GITHUB_ENV"
           cargo build --locked --profile ci-test --target "$TARGET" --workspace --bins
+          install -Dm755 "$runtime/bwrap" "$runtime/codex-resources/bwrap"
+          echo "CARGO_BIN_EXE_bwrap=$runtime/bwrap" >> "$GITHUB_ENV"
           helper="$CARGO_TARGET_DIR/$TARGET/ci-test/codex-linux-sandbox"
           echo "CARGO_BIN_EXE_codex-linux-sandbox=$helper" >> "$GITHUB_ENV"
           echo "CARGO_BIN_EXE_codex_linux_sandbox=$helper" >> "$GITHUB_ENV"
       - name: Run every selected package test
         if: matrix.task != 'clippy'
+        env:
+          INSTA_UPDATE: new
         run: |
           set -euo pipefail
           packages=()
@@ -86,6 +95,14 @@ jobs:
           done < "$RUNNER_TEMP/cargo-packages"
           test "${#packages[@]}" -gt 0
           cargo nextest run --locked --target "$TARGET" --cargo-profile ci-test --no-fail-fast --test-threads 2 "${packages[@]}"
+      - name: Upload snapshot candidates
+        if: failure() && matrix.task != 'clippy'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: codefx-snapshot-candidates-${{ matrix.task }}
+          path: codex-rs/**/*.snap.new
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Record disk usage
         if: always()
         run: |
