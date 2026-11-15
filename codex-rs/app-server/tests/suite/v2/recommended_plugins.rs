@@ -40,15 +40,18 @@ enum ToolSuggestFeature {
 #[test_case(false; "default remote features")]
 #[test_case(true; "explicit remote features")]
 #[tokio::test]
-async fn first_turn_after_external_login_preserves_local_plugins(remote_features: bool) -> Result<()> {
+async fn first_turn_after_external_login_preserves_local_plugins(
+    remote_features: bool,
+) -> Result<()> {
     recommended_plugins_after_external_login(ToolSuggestFeature::Enabled, remote_features).await
 }
 
 #[test_case(false; "default remote features")]
 #[test_case(true; "explicit remote features")]
 #[tokio::test]
-async fn first_turn_after_external_login_preserves_local_plugins_without_tool_suggest(remote_features: bool)
--> Result<()> {
+async fn first_turn_after_external_login_preserves_local_plugins_without_tool_suggest(
+    remote_features: bool,
+) -> Result<()> {
     recommended_plugins_after_external_login(ToolSuggestFeature::Disabled, remote_features).await
 }
 
@@ -107,7 +110,10 @@ async fn recommended_plugins_after_external_login(
     let original_config = std::fs::read(&config_path)?;
     let local_skill = codex_home.path().join("skills/local/SKILL.md");
     std::fs::create_dir_all(local_skill.parent().expect("skill parent"))?;
-    std::fs::write(&local_skill, "---\nname: local\ndescription: local only\n---\nbody\n")?;
+    std::fs::write(
+        &local_skill,
+        "---\nname: local\ndescription: local only\n---\nbody\n",
+    )?;
     let original_skill = std::fs::read(&local_skill)?;
     let sqlite_home = codex_home.path().to_string_lossy();
     let mut app_server = TestAppServer::builder()
@@ -212,14 +218,28 @@ async fn recommended_plugins_after_external_login(
         .collect::<Vec<_>>();
     assert_eq!(recommendations.is_empty(), !remote_features);
     if remote_features {
-        assert!(recommendations.iter().any(|text| text.contains("GitHub (github@openai-curated-remote)")));
+        assert!(
+            recommendations
+                .iter()
+                .any(|text| text.contains("GitHub (github@openai-curated-remote)"))
+        );
     }
     assert_eq!(std::fs::read(&config_path)?, original_config);
     assert_eq!(std::fs::read(&local_skill)?, original_skill);
-    assert!(!codex_home.path().join("plugins/cache/openai-curated-remote").exists());
-    assert!(server.received_requests().await.expect("requests").iter().all(|request| {
-        request.url.path() != "/bundle"
-    }));
+    assert!(
+        !codex_home
+            .path()
+            .join("plugins/cache/openai-curated-remote")
+            .exists()
+    );
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("requests")
+            .iter()
+            .all(|request| { request.url.path() != "/bundle" })
+    );
     let body = request.body_json();
     let tool_names = body
         .get("tools")
