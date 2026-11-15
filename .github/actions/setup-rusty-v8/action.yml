@@ -62,3 +62,9 @@ runs:
         (cd "${binding_dir}" && tr -d '\r' < "${checksums_path}" | "${checksum_command[@]}")
         echo "RUSTY_V8_ARCHIVE=${archive_path}" >> "${GITHUB_ENV}"
         echo "RUSTY_V8_SRC_BINDING_PATH=${binding_path}" >> "${GITHUB_ENV}"
+
+    - name: Generate Linux bindings matching the verified native archive
+      if: runner.os == 'Linux'
+      uses: ./.github/actions/codefx-linux-v8-binding
+      with:
+        target: ${{ inputs.target }}

@@ -202,6 +202,14 @@ def linux_projection(path: str, text: str) -> str:
             '          echo "CARGO_TARGET_DIR=$cargo_target_dir"',
             '          echo "ZIG_LOCAL_CACHE_DIR=$CI_BUILD_ROOT/zig-local"\n          echo "CARGO_TARGET_DIR=$cargo_target_dir"',
         )
+    if path == ".github/actions/setup-rusty-v8/action.yml":
+        text += """
+    - name: Generate Linux bindings matching the verified native archive
+      if: runner.os == 'Linux'
+      uses: ./.github/actions/codefx-linux-v8-binding
+      with:
+        target: ${{ inputs.target }}
+"""
     return text
 
 

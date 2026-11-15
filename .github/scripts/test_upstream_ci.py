@@ -8,6 +8,27 @@ import check_upstream_ci as policy
 
 
 class LinuxProjection(unittest.TestCase):
+    def test_linux_binding_generation_preserves_archive_verification(self):
+        path = ".github/actions/setup-rusty-v8/action.yml"
+        official = "runs:\n  using: composite\n  steps:\n    - run: sha256sum --check manifest\n"
+        projected = policy.linux_projection(path, official)
+        self.assertIn("sha256sum --check manifest", projected)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "fork"
+            upstream = Path(temp) / "upstream"
+            for directory in (root, upstream):
+                (directory / path).parent.mkdir(parents=True)
+            (upstream / path).write_text(official)
+            (root / path).write_text(projected)
+            self.assertEqual(policy.baseline_errors(root, upstream, [path]), [])
+            for mutation in (
+                projected.replace("sha256sum --check manifest", "true"),
+                projected.replace("if: runner.os == 'Linux'", "if: false"),
+                projected.replace("codefx-linux-v8-binding", "unverified-binding"),
+            ):
+                (root / path).write_text(mutation)
+                self.assertTrue(policy.baseline_errors(root, upstream, [path]))
+
     def test_linux_matrices_keep_commands_and_drop_other_platforms(self):
         source = (
             "jobs:\n  test:\n    strategy:\n      matrix:\n        include:\n"

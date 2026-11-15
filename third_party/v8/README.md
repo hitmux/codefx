@@ -142,6 +142,12 @@ bindings use that same threshold; never pair a native 64-byte threshold with
 GN's size-zero binding constant. These are fixed platform choices, not additional
 developer build switches.
 
+Cargo CI verifies the published archive and its original manifest, then generates
+the Linux sandbox binding from these pinned headers through
+`rusty_v8_sandbox_binding_<target>`. The generated input replaces the published
+Unix size-zero binding for Cargo consumers. The runtime TypedArray regression
+checks the threshold against the native archive before calling `get_contents`.
+
 Use a native Visual Studio Developer PowerShell with the C++ tools and Windows
 SDK available. The SDK supplies headers, libraries, `dumpbin.exe`, and the
 assembler. From the repo root, build the archive for that host:

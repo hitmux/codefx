@@ -26,7 +26,7 @@ on:
       runtime_component:
         description: Runtime component to verify
         type: choice
-        options: [all, exec, shell, app-server, core]
+        options: [all, exec, shell, app-server, core, v8]
         default: all
       sdk_regressions:
         description: Verify SDK child process lifecycle regressions
@@ -38,11 +38,11 @@ jobs:
   runtime-regressions:
     if: github.event_name == 'workflow_dispatch' && inputs.runtime_regressions
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        component: ${{ fromJSON(inputs.runtime_component == 'shell' && '["shell"]' || inputs.runtime_component == 'exec' && '["exec"]' || inputs.runtime_component == 'app-server' && '["app-server"]' || inputs.runtime_component == 'core' && '["core"]' || '["exec","shell"]') }}
+        component: ${{ fromJSON(inputs.runtime_component == 'shell' && '["shell"]' || inputs.runtime_component == 'exec' && '["exec"]' || inputs.runtime_component == 'app-server' && '["app-server"]' || inputs.runtime_component == 'core' && '["core"]' || inputs.runtime_component == 'v8' && '["v8"]' || '["exec","shell"]') }}
     env:
       CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_CI_TEST_DEBUG: "0"
@@ -56,7 +56,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
       - uses: ./.github/actions/codefx-linux-voice-sdk
-        if: matrix.component != 'shell'
+        if: matrix.component != 'shell' && matrix.component != 'v8'
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: ./.github/actions/setup-rusty-v8
         if: matrix.component != 'shell'
@@ -78,6 +78,7 @@ jobs:
         with:
           tool: cargo-nextest@0.9.103
       - name: Prepare bundled sandbox executable
+        if: matrix.component != 'v8'
         working-directory: codex-rs
         run: |
           cargo build --locked --profile ci-test --bin bwrap
@@ -109,6 +110,10 @@ jobs:
           cargo build --locked --profile ci-test --bin codex --bin codex-linux-sandbox --bin codex-exec --bin codex-code-mode-host --bin test_stdio_server
           export CARGO_BIN_EXE_codex_linux_sandbox="$CARGO_TARGET_DIR/ci-test/codex-linux-sandbox"
           cargo nextest run --locked --cargo-profile ci-test -p codex-core -p codex-config -p codex-v8-poc --no-fail-fast --test-threads 2 --retries 0 -E 'test(compact_program_tests) | test(rollout_budget) | test(bundled_plugin_compatibility_guard) | test(cli_stream) | test(reads_typed_array_contents) | package(codex-config)'
+      - name: Verify generated binding against the verified native V8 library
+        if: matrix.component == 'v8'
+        working-directory: codex-rs
+        run: cargo nextest run --locked --cargo-profile ci-test -p codex-v8-poc --no-fail-fast --test-threads 2 --retries 0
   plugin-regressions:
     if: github.event_name == 'workflow_dispatch' && inputs.plugin_regressions
     runs-on: ubuntu-24.04
@@ -227,7 +232,7 @@ jobs:
             scripts/install/smoke_source_package.py \
             scripts/install/prepare_sdk_package.py \
             scripts/install/test_prepare_sdk_package.py
-          pnpm exec prettier --write .github/workflows/*.yml .github/upstream-ci.json .github/CI_POLICY.md .github/workflows/README.md sdk/typescript/src/exec.ts sdk/typescript/tests/exec.test.ts sdk/typescript/tests/run.test.ts sdk/typescript/tests/testCodex.ts
+          pnpm exec prettier --write .github/workflows/*.yml .github/actions/codefx-linux-v8-binding/action.yml .github/actions/setup-rusty-v8/action.yml .github/upstream-ci.json .github/CI_POLICY.md .github/workflows/README.md sdk/typescript/src/exec.ts sdk/typescript/tests/exec.test.ts sdk/typescript/tests/run.test.ts sdk/typescript/tests/testCodex.ts
           git diff --binary > "$RUNNER_TEMP/codefx-ci-format.patch"
           git diff --stat
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
