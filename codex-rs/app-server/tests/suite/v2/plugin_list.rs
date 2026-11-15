@@ -1188,7 +1188,9 @@ async fn plugin_list_refreshes_plugins_from_each_cwd(
         set_project_trust_level(codex_home.path(), repo, TrustLevel::Trusted)?;
         write_installed_plugin_with_version(&codex_home, name, "sample", "1.0.0")?;
         std::fs::write(
-            codex_home.path().join(format!("plugins/cache/{name}/sample/1.0.0/.codex-plugin/plugin.json")),
+            codex_home.path().join(format!(
+                "plugins/cache/{name}/sample/1.0.0/.codex-plugin/plugin.json"
+            )),
             serde_json::to_vec(&serde_json::json!({"name": "sample", "version": "1.0.0"}))?,
         )?;
     }
@@ -4541,7 +4543,10 @@ async fn plugin_list_fetches_shared_with_me_kind() -> Result<()> {
     );
     // Shared-with-me listing fetches its requested workspace scope; it must
     // not launch the former background full-account snapshot refresh.
-    let requests = server.received_requests().await.expect("wiremock records requests");
+    let requests = server
+        .received_requests()
+        .await
+        .expect("wiremock records requests");
     assert!(requests.iter().all(|request| {
         !request.url.path().ends_with("/ps/plugins/installed")
             || request.url.query_pairs().any(|(name, _)| name == "scope")
