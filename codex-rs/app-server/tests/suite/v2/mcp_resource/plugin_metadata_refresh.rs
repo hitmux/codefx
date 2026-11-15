@@ -1,4 +1,4 @@
-//! Exercises installed-metadata refreshes against live MCP and bundled plugin skills.
+//! Reconciliation preserves locally installed skills and an existing MCP runtime.
 
 use super::*;
 use axum::Json;
@@ -14,7 +14,7 @@ use pretty_assertions::assert_eq;
 use tokio::sync::RwLock;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn signed_image_renewal_preserves_live_mcp_and_plugin_skills() -> Result<()> {
+async fn remote_reconcile_preserves_local_skills_and_live_mcp() -> Result<()> {
     let responses_server = responses::start_mock_server().await;
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let base_url = format!("http://{}", listener.local_addr()?);
@@ -64,6 +64,8 @@ async fn signed_image_renewal_preserves_live_mcp_and_plugin_skills() -> Result<(
         StreamableHttpServerConfig::default(),
     );
     let server_installed = Arc::clone(&installed);
+    let bundle_requests = Arc::new(AtomicUsize::new(0));
+    let server_bundle_requests = Arc::clone(&bundle_requests);
     let router = Router::new()
         .nest_service("/api/codex/ps/mcp", mcp_service)
         .route(
@@ -78,7 +80,10 @@ async fn signed_image_renewal_preserves_live_mcp_and_plugin_skills() -> Result<(
                 }
             }),
         )
-        .route("/bundle", get(move || async move { bundle }));
+        .route("/bundle", get(move || async move {
+            server_bundle_requests.fetch_add(1, Ordering::SeqCst);
+            bundle
+        }));
     let server_handle = tokio::spawn(async move {
         let _ = axum::serve(listener, router).await;
     });
@@ -90,7 +95,7 @@ async fn signed_image_renewal_preserves_live_mcp_and_plugin_skills() -> Result<(
         .enable_feature(Feature::Plugins)
         .enable_feature(Feature::RemotePlugin)
         .disable_feature(Feature::PluginSharing)
-        .with_extra_config("[skills]\ninclude_instructions = true")
+        .with_extra_config("[skills]\ninclude_instructions = true\n[plugins.\"demo-plugin@openai-curated-remote\"]\nenabled = true")
         .write(codex_home.path())?;
     write_chatgpt_auth(
         codex_home.path(),
@@ -100,6 +105,18 @@ async fn signed_image_renewal_preserves_live_mcp_and_plugin_skills() -> Result<(
             .chatgpt_account_id("account-123"),
         AuthCredentialsStoreMode::File,
     )?;
+    // Install the fixture locally; listing or reconciliation must never fetch it.
+    let plugin_root = codex_home.path().join(
+        "plugins/cache/openai-curated-remote/demo-plugin/1.0.0",
+    );
+    for (path, contents) in [
+        (".codex-plugin/plugin.json", r#"{"name":"demo-plugin"}"#),
+        ("skills/deploy/SKILL.md", SKILL_CONTENTS),
+    ] {
+        let path = plugin_root.join(path);
+        std::fs::create_dir_all(path.parent().expect("local fixture parent"))?;
+        std::fs::write(path, contents)?;
+    }
     let mut app_server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .without_managed_config()
@@ -138,7 +155,7 @@ async fn signed_image_renewal_preserves_live_mcp_and_plugin_skills() -> Result<(
     );
 
     installed.write().await["release"]["interface"]["logo_url"] = json!(renewed_logo);
-    refresh_and_expect_logo(&mut app_server, renewed_logo).await?;
+    refresh_and_expect_logo(&mut app_server, original_logo).await?;
     read_mcp_skill_resource(&mut app_server, &thread.id).await?;
     assert_eq!(sessions.load(Ordering::SeqCst), warm_sessions);
     assert_eq!(
@@ -148,7 +165,7 @@ async fn signed_image_renewal_preserves_live_mcp_and_plugin_skills() -> Result<(
 
     installed.write().await["release"]["interface"]["capabilities"] =
         json!(["Updated store badge"]);
-    refresh_and_expect_logo(&mut app_server, renewed_logo).await?;
+    refresh_and_expect_logo(&mut app_server, original_logo).await?;
     read_mcp_skill_resource(&mut app_server, &thread.id).await?;
     assert_eq!(sessions.load(Ordering::SeqCst), warm_sessions);
     assert_eq!(
@@ -156,14 +173,13 @@ async fn signed_image_renewal_preserves_live_mcp_and_plugin_skills() -> Result<(
         warm_skills
     );
 
-    // Runtime metadata must update the cached skill catalog without changing the bundle.
+    // A later remote disablement must not change the local skill via reconciliation.
     installed.write().await["release"]["interface"]["logo_url"] = json!(changed_logo);
     installed.write().await["enabled"] = json!(false);
-    refresh_and_expect_logo(&mut app_server, changed_logo).await?;
-    assert!(
-        list_plugin_skills(&mut app_server, codex_home.path())
-            .await?
-            .is_empty()
+    refresh_and_expect_logo(&mut app_server, original_logo).await?;
+    assert_eq!(
+        list_plugin_skills(&mut app_server, codex_home.path()).await?,
+        warm_skills,
     );
     read_mcp_skill_resource(&mut app_server, &thread.id).await?;
     assert_eq!(sessions.load(Ordering::SeqCst), warm_sessions);
@@ -172,13 +188,14 @@ async fn signed_image_renewal_preserves_live_mcp_and_plugin_skills() -> Result<(
         std::fs::read_to_string(warm_skills[0].path.as_str())?,
         SKILL_CONTENTS
     );
+    assert_eq!(bundle_requests.load(Ordering::SeqCst), 0);
     server_handle.abort();
     Ok(())
 }
 
 async fn refresh_and_expect_logo(app_server: &mut TestAppServer, logo: &str) -> Result<()> {
-    // plugin/installed starts the real background sync with the production callback.
-    // Reconcile acquires the same gate, so its completion fences the background pass.
+    // Explicit metadata reads can use the existing cache. Reconcile is a no-op
+    // even when the server offers a different bundle or updated remote state.
     let request = app_server
         .send_raw_request("plugin/installed", Some(json!({})))
         .await?;
@@ -213,7 +230,7 @@ async fn refresh_and_expect_logo(app_server: &mut TestAppServer, logo: &str) -> 
             .and_then(|info| info.logo_url.as_deref()),
         Some(logo)
     );
-    // Finish the follow-up read's background pass before changing the next snapshot.
+    // Repeated compatibility requests must also preserve the local installation.
     let request = app_server
         .send_raw_request("plugin/reconcile", Some(json!({})))
         .await?;

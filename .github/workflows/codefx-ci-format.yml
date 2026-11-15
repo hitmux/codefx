@@ -26,8 +26,12 @@ on:
       runtime_component:
         description: Runtime component to verify
         type: choice
-        options: [all, exec, shell]
+        options: [all, exec, shell, app-server]
         default: all
+      sdk_regressions:
+        description: Verify SDK child process lifecycle regressions
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -52,10 +56,10 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
       - uses: ./.github/actions/codefx-linux-voice-sdk
-        if: matrix.component == 'exec'
+        if: matrix.component != 'shell'
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: ./.github/actions/setup-rusty-v8
-        if: matrix.component == 'exec'
+        if: matrix.component != 'shell'
         with:
           target: x86_64-unknown-linux-gnu
       - name: Install sandbox test prerequisites
@@ -90,6 +94,13 @@ jobs:
         run: |
           cargo build --locked --profile ci-test -p codex-exec --bin codex-exec
           cargo nextest run --locked --cargo-profile ci-test -p codex-exec --no-fail-fast --test-threads 2 --retries 0 -E 'test(suite::auth_env::exec_uses_codex_api_key_env_var) | test(suite::agents_md)'
+      - name: Verify account and plugin protocol regressions
+        if: matrix.component == 'app-server'
+        working-directory: codex-rs
+        run: |
+          cargo build --locked --profile ci-test --bin codex-app-server --bin codex-linux-sandbox --bin codex-code-mode-host
+          export CARGO_BIN_EXE_codex_linux_sandbox="$CARGO_TARGET_DIR/ci-test/codex-linux-sandbox"
+          cargo nextest run --locked --cargo-profile ci-test -p codex-app-server --no-fail-fast --test-threads 2 --retries 0 -E 'test(suite::v2::plugin_) | test(curated_mcp_sync) | test(marketplace_upgrade) | test(plugin_metadata_refresh) | test(marketplace_upgrade_refreshes_hook_runtime) | test(api_key_cyber_access_program_server_rejection)'
   plugin-regressions:
     if: github.event_name == 'workflow_dispatch' && inputs.plugin_regressions
     runs-on: ubuntu-24.04
@@ -117,7 +128,7 @@ jobs:
           tool: cargo-nextest@0.9.103
       - name: Verify all feature and plugin library regressions
         working-directory: codex-rs
-        run: cargo nextest run --locked -p codex-features -p codex-core-plugins --lib --no-fail-fast --test-threads 2
+        run: cargo nextest run --locked -p codex-features -p codex-core-plugins -p codex-model-provider-info --lib --no-fail-fast --test-threads 2
   http-regressions:
     if: github.event_name == 'workflow_dispatch' && inputs.http_regressions
     runs-on: ubuntu-24.04
@@ -208,7 +219,7 @@ jobs:
             scripts/install/smoke_source_package.py \
             scripts/install/prepare_sdk_package.py \
             scripts/install/test_prepare_sdk_package.py
-          pnpm exec prettier --write .github/workflows/*.yml .github/upstream-ci.json .github/CI_POLICY.md .github/workflows/README.md sdk/typescript/tests/run.test.ts sdk/typescript/tests/testCodex.ts
+          pnpm exec prettier --write .github/workflows/*.yml .github/upstream-ci.json .github/CI_POLICY.md .github/workflows/README.md sdk/typescript/src/exec.ts sdk/typescript/tests/exec.test.ts sdk/typescript/tests/run.test.ts sdk/typescript/tests/testCodex.ts
           git diff --binary > "$RUNNER_TEMP/codefx-ci-format.patch"
           git diff --stat
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -217,3 +228,6 @@ jobs:
           path: ${{ runner.temp }}/codefx-ci-format.patch
           if-no-files-found: error
           retention-days: 3
+      - name: Verify SDK child process lifecycle
+        if: github.event_name == 'workflow_dispatch' && inputs.sdk_regressions
+        run: pnpm -r --filter ./sdk/typescript run test --runInBand tests/exec.test.ts

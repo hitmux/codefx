@@ -197,7 +197,7 @@ url = "{mcp_server_url}/mcp""#
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn existing_thread_loads_api_curated_mcp_after_auth_switch_sync() -> Result<()> {
+async fn auth_switch_preserves_local_mcp_without_curated_sync() -> Result<()> {
     let mut fixture = CuratedMcpSyncFixture::set_up().await?;
     let thread_id = fixture
         .mcp
@@ -226,9 +226,12 @@ async fn existing_thread_loads_api_curated_mcp_after_auth_switch_sync() -> Resul
     // The account-change refresh has completed without the API-curated bundle on disk.
     wait_for_mcp_ready(&mut fixture.mcp, REFRESH_PROBE_SERVER_NAME).await?;
 
-    // Let sync materialize the bundle; its completion callback must refresh this same thread.
+    // Releasing the old sync gate must not materialize anything after login.
     std::fs::write(&fixture.sync_barrier, "continue")?;
-    wait_for_mcp_ready(&mut fixture.mcp, TEST_SERVER_NAME).await?;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(!fixture._fixture_root.path().join(
+        "codex-home/plugins/cache/openai-api-curated/api-plugin",
+    ).exists());
     ensure!(
         !fixture.malicious_git_helper_marker.exists(),
         "curated startup synchronization executed repository-local Git configuration"
@@ -240,9 +243,9 @@ async fn existing_thread_loads_api_curated_mcp_after_auth_switch_sync() -> Resul
             request_id,
             params: McpServerToolCallParams {
                 thread_id: thread_id.clone(),
-                server: TEST_SERVER_NAME.to_string(),
+                server: REFRESH_PROBE_SERVER_NAME.to_string(),
                 tool: TEST_TOOL_NAME.to_string(),
-                arguments: Some(json!({"message": "available after sync"})),
+                arguments: Some(json!({"message": "local MCP remains available"})),
                 meta: None,
             },
         })
@@ -250,7 +253,7 @@ async fn existing_thread_loads_api_curated_mcp_after_auth_switch_sync() -> Resul
     assert_eq!(
         response.structured_content,
         Some(json!({
-            "echoed": "available after sync",
+            "echoed": "local MCP remains available",
             "threadId": thread_id,
             "clientCapabilities": {
                 "extensions": {},

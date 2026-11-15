@@ -782,7 +782,7 @@ pub fn built_in_model_providers(
 /// Merge configured providers into the built-in provider catalog.
 ///
 /// Configured providers extend the built-in set. Built-in providers are not
-/// generally overridable. OpenAI allows a catalog URL override, while the
+/// generally overridable. OpenAI allows retry/timeout settings and a catalog URL override, while the
 /// cloud-hosted OpenAI providers allow a limited
 /// set of endpoint, authentication, header, and cloud-specific overrides.
 pub fn merge_configured_model_providers(
@@ -792,7 +792,19 @@ pub fn merge_configured_model_providers(
     for (key, mut provider) in configured_model_providers {
         if key == "openai" {
             // Keep the built-in identity, inference routing, and authentication.
-            // Only catalog routing is configurable through this provider entry.
+            // Only transport budgets and catalog routing are configurable here.
+            // Transport budgets do not change provider identity, routing, or auth.
+            // Preserve explicit zero values, including immediate WebSocket fallback.
+            if let Some(built_in_provider) = model_providers.get_mut(&key) {
+                built_in_provider.request_max_retries = provider.request_max_retries
+                    .or(built_in_provider.request_max_retries);
+                built_in_provider.stream_max_retries = provider.stream_max_retries
+                    .or(built_in_provider.stream_max_retries);
+                built_in_provider.stream_idle_timeout_ms = provider.stream_idle_timeout_ms
+                    .or(built_in_provider.stream_idle_timeout_ms);
+                built_in_provider.websocket_connect_timeout_ms = provider.websocket_connect_timeout_ms
+                    .or(built_in_provider.websocket_connect_timeout_ms);
+            }
             if let Some(catalog_url) = provider.model_catalog_url.take()
                 && let Some(built_in_provider) = model_providers.get_mut(&key)
             {

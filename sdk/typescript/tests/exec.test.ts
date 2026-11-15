@@ -73,6 +73,31 @@ describe("CodexExec", () => {
     }
   });
 
+  it("handles a late abort after the consumer stops reading", async () => {
+    const { CodexExec } = await import("../src/exec");
+    const child = new FakeChildProcess();
+    spawnMock.mockReturnValue(child as unknown as child_process.ChildProcess);
+    const controller = new AbortController();
+    const exitListener = jest.fn();
+    child.once("exit", exitListener);
+    controller.signal.addEventListener("abort", () => {
+      child.emit("error", new Error("late abort"));
+    });
+    setImmediate(() => child.stdout.write('{"type":"turn.failed"}\n'));
+
+    const exec = new CodexExec("codex");
+    for await (const _ of exec.run({ input: "hi", signal: controller.signal })) {
+      break;
+    }
+
+    expect(child.killed).toBe(true);
+    expect(() => controller.abort()).not.toThrow();
+    child.emit("exit", null, "SIGTERM");
+    expect(exitListener).toHaveBeenCalledWith(null, "SIGTERM");
+    child.stdout.end();
+    child.stderr.end();
+  });
+
   it("places resume args before image args", async () => {
     const { CodexExec } = await import("../src/exec");
     spawnMock.mockClear();

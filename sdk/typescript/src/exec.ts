@@ -255,7 +255,9 @@ export class CodexExec {
       }
     } finally {
       rl.close();
-      child.removeAllListeners();
+      // Keep the error guard and Node's internal exit listeners until the child
+      // exits. A caller can abort after consuming turn.failed but before exit;
+      // removing these listeners makes that late AbortError unhandled.
       try {
         if (!child.killed) child.kill();
       } catch {

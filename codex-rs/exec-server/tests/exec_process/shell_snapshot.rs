@@ -6,7 +6,7 @@ use test_case::test_case;
 enum SnapshotSandbox {
     None,
     WorkspaceWrite,
-    DenyFdPath,
+    CloseDescriptors,
 }
 
 pub(super) struct StartupProcesses(pub(super) std::path::PathBuf);
@@ -91,9 +91,9 @@ async fn shell_snapshot_preserves_successful_startup_output_and_services(
 #[test_case("bash", true, SnapshotSandbox::None; "bash_tty")]
 #[cfg_attr(target_os = "macos", test_case("zsh", false, SnapshotSandbox::None; "zsh"))]
 #[cfg_attr(target_os = "macos", test_case("zsh", true, SnapshotSandbox::None; "zsh_tty"))]
-#[test_case("bash", false, SnapshotSandbox::DenyFdPath; "blocked_descriptor_path")]
-#[cfg_attr(target_os = "macos", test_case("zsh", false, SnapshotSandbox::DenyFdPath; "zsh_blocked_descriptor_path"))]
-#[cfg_attr(target_os = "macos", test_case("zsh", true, SnapshotSandbox::DenyFdPath; "zsh_blocked_descriptor_path_tty"))]
+#[test_case("bash", false, SnapshotSandbox::CloseDescriptors; "closed_descriptor_transport")]
+#[cfg_attr(target_os = "macos", test_case("zsh", false, SnapshotSandbox::CloseDescriptors; "zsh_closed_descriptor_transport"))]
+#[cfg_attr(target_os = "macos", test_case("zsh", true, SnapshotSandbox::CloseDescriptors; "zsh_closed_descriptor_transport_tty"))]
 #[test_case("bash", false, SnapshotSandbox::WorkspaceWrite; "bash_protected_transport")]
 #[test_case("bash", true, SnapshotSandbox::WorkspaceWrite; "bash_protected_transport_tty")]
 #[cfg_attr(target_os = "macos", test_case("zsh", false, SnapshotSandbox::WorkspaceWrite; "zsh_protected_transport"))]
@@ -105,7 +105,7 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
     tty: bool,
     sandbox_mode: SnapshotSandbox,
 ) -> Result<()> {
-    let deny_fd_path = sandbox_mode == SnapshotSandbox::DenyFdPath;
+    let close_descriptors = sandbox_mode == SnapshotSandbox::CloseDescriptors;
     let use_sandbox = sandbox_mode != SnapshotSandbox::None;
     if use_sandbox
         && let Some(warning) = codex_sandboxing::system_bwrap_warning(
@@ -130,20 +130,20 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
             _server: None,
         }
     } else {
-        create_process_context(deny_fd_path).await?
+        create_process_context(close_descriptors).await?
     };
     let home = TempDir::new()?;
     let cwd = PathUri::from_host_native_path(home.path())?;
     // Keep full-size state in a function, below the 512 KiB state + environment cap.
     // The blocked-path case still exercises the smaller environment fallback.
-    let payload_len = if deny_fd_path { 1 } else { 480 * 1024 };
+    let payload_len = if close_descriptors { 1 } else { 480 * 1024 };
     let payload = "x".repeat(payload_len);
     let source = if shell == "bash" {
         "${BASH_SOURCE[0]}"
     } else {
         "${(%):-%x}"
     };
-    let source_check = if deny_fd_path {
+    let source_check = if close_descriptors {
         String::new()
     } else {
         format!("case \"{source}\" in /dev/fd/*) ;; *) return 42 ;; esac; ")
@@ -159,6 +159,30 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
             "printf x >> \"$HOME/captures\"\nprofile_helper() {{ {source_check}local payload='{payload}'; [ \"${{#payload}}\" = {payload_len} ] || return 43; printf 'restored:%s' \"$1\"; }}\nexec() {{ exit 41; }}\nset -u\n{aliases}"
         ),
     )?;
+    let shell_path = if close_descriptors {
+        // Simulate a launcher that strips inherited readers. Mounting tmpfs on
+        // /dev/fd is invalid on Linux because it is a dynamic /proc/self/fd
+        // symlink; that fails before snapshot probing can exercise its fallback.
+        let wrapper = home.path().join("snapshot-shell");
+        codex_utils_cargo_bin::write_executable(
+            &wrapper,
+            &format!(r#"#!/usr/bin/python3
+import os
+import sys
+for descriptor in os.listdir('/dev/fd'):
+    try:
+        fd = int(descriptor)
+        if fd > 2:
+            os.close(fd)
+    except (OSError, ValueError):
+        pass
+os.execv('/bin/{shell}', ['/bin/{shell}', *sys.argv[1:]])
+"#),
+        )?;
+        wrapper.to_string_lossy().into_owned()
+    } else {
+        format!("/bin/{shell}")
+    };
     let protected_file =
         tempfile::NamedTempFile::new_in(codex_uds::prepare_shared_daemon_socket_directory()?)?;
     std::fs::write(protected_file.path(), "protected")?;
@@ -181,12 +205,7 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
             cwd.clone().into(),
             FileSystemAccessMode::Write,
         ));
-        if deny_fd_path {
-            policy.entries.push(FileSystemSandboxEntry::new(
-                PathUri::from_host_native_path("/dev/fd")?.into(),
-                FileSystemAccessMode::Deny,
-            ));
-        } else {
+        if !close_descriptors {
             policy.entries.push(FileSystemSandboxEntry::new(
                 PathUri::from_host_native_path(std::fs::canonicalize("/tmp")?)?.into(),
                 FileSystemAccessMode::Write,
@@ -205,12 +224,13 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
         let home = home.path();
         let sandbox = sandbox.clone();
         let command = command.clone();
+        let shell_path = shell_path.clone();
         let protected_path = protected_file.path();
         async move {
             let params = ExecParams {
                     metadata: Default::default(),
                     process_id: format!("parallel-{index}").into(),
-                    argv: vec![format!("/bin/{shell}"), "-lc".to_string(), command],
+                    argv: vec![shell_path.clone(), "-lc".to_string(), command],
                     cwd,
                     env: HashMap::new(),
                     env_policy: Some(ExecEnvPolicy {
@@ -231,7 +251,7 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
                         scope_id: "parallel".to_string(),
                         shell: ShellInfo {
                             name: shell.to_string(),
-                            path: format!("/bin/{shell}"),
+                            path: shell_path,
                         },
                     }),
                     tty,
@@ -242,7 +262,7 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
                     managed_network: None,
                     network_proxy: None,
                 };
-            if deny_fd_path && index == 0 {
+            if close_descriptors && index == 0 {
                 let mut probe = params.clone();
                 probe.process_id = "descriptor-sandbox-probe".into();
                 probe.argv[2] = "printf sandbox-ready".to_string();
@@ -252,7 +272,7 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
                 assert_eq!(
                     collect_process_output_from_events(probe.process).await?,
                     ("sandbox-ready".to_string(), String::new(), Some(0), true),
-                    "descriptor denial must allow ordinary sandboxed commands",
+                    "descriptor stripping must preserve ordinary sandboxed commands",
                 );
             }
             let started = backend.start(params).await?;

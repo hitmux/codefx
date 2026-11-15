@@ -374,7 +374,9 @@ impl ShellSnapshotCache {
         if shell_type == ShellType::Bash {
             // Bash's remote-daemon startup path can source .bashrc even with -p.
             // Suppress it explicitly before restoring the captured, filtered state.
-            prepared.command.insert(shell_start + 1, "--norc".to_string());
+            prepared
+                .command
+                .insert(shell_start + 1, "--norc".to_string());
         }
 
         telemetry.shell_snapshot_command(wait, availability, "used");

@@ -120,7 +120,11 @@ impl Drop for ChildProcessCleanupGuard {
 // process group instead of only the direct CLI child.
 fn run_cli_command(command: &mut Command) -> io::Result<Output> {
     // These fixtures test response streaming, not live API-key catalog discovery.
-    command.args(["-c", "features.api_key_model_discovery=false"]);
+    command.args([
+        "-c", "features.api_key_model_discovery=false",
+        "-c", "model_providers.openai.request_max_retries=0",
+        "-c", "model_providers.openai.stream_max_retries=0",
+    ]);
     #[cfg(unix)]
     command.process_group(0);
 

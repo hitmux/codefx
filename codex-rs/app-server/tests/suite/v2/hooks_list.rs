@@ -722,7 +722,7 @@ async fn loaded_session_refreshes_externally_updated_plugin_hooks() -> Result<()
 
 #[cfg(unix)]
 #[tokio::test]
-async fn automatic_marketplace_upgrade_refreshes_hook_runtime_for_loaded_session() -> Result<()> {
+async fn explicit_marketplace_upgrade_refreshes_hook_runtime_for_loaded_session() -> Result<()> {
     skip_if_host_windows!(Ok(()));
     skip_if_remote!(Ok(()), "command hooks use host-local script and log paths");
 
@@ -841,12 +841,18 @@ source = "{}"
     assert!(!new_plugin_root.exists());
 
     std::fs::write(&upgrade_gate, "ready")?;
-    timeout(DEFAULT_TIMEOUT, async {
-        while !new_plugin_root.exists() || old_plugin_root.exists() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await?;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(old_plugin_root.exists());
+    assert!(!new_plugin_root.exists());
+    let upgrade = mcp.send_marketplace_upgrade_request(
+        codex_app_server_protocol::MarketplaceUpgradeParams {
+            marketplace_name: Some("test".to_string()),
+        },
+    ).await?;
+    let _: codex_app_server_protocol::MarketplaceUpgradeResponse =
+        timeout(DEFAULT_TIMEOUT, mcp.read_response(upgrade)).await??;
+    assert!(new_plugin_root.exists());
+    assert!(!old_plugin_root.exists());
 
     let hooks_list_id = mcp
         .send_hooks_list_request(HooksListParams {
