@@ -216,6 +216,7 @@ jobs:
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version-file: .nvmrc
+      - uses: facebook/install-dotslash@1e4e7b3e07eaca387acb98f1d4720e0bee8dbb6a # v2
       - name: Prepare formatters from repository locks
         run: pnpm install --frozen-lockfile
       - name: Verify CI policy regression guards
@@ -226,6 +227,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          dotslash tools/buildifier -mode=fix -lint=off third_party/v8/BUILD.bazel
           uv run --frozen --project scripts ruff format \
             .github/scripts/check_upstream_ci.py \
             .github/scripts/test_upstream_ci.py \
