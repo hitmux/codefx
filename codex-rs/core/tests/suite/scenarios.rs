@@ -1571,25 +1571,33 @@ async fn matched_response_mocks_capture_only_the_selected_thread() -> Result<()>
                     &server,
                     header("thread-id", thread),
                     sse(vec![ev_completed(thread)]),
-                ).await
+                )
+                .await
             } else {
                 responses::mount_response_once_match(
                     &server,
                     header("thread-id", thread),
                     responses::sse_response(sse(vec![ev_completed(thread)])),
-                ).await
+                )
+                .await
             };
             routes.push((thread, capture));
         }
         let client = reqwest::Client::builder().no_proxy().build()?;
         for (thread, _) in &routes {
-            client.post(format!("{}/responses", server.uri()))
+            client
+                .post(format!("{}/responses", server.uri()))
                 .header("thread-id", *thread)
                 .json(&json!({"input": []}))
-                .send().await?.error_for_status()?;
+                .send()
+                .await?
+                .error_for_status()?;
         }
         for (thread, capture) in routes {
-            assert_eq!(capture.single_request().header("thread-id").as_deref(), Some(thread));
+            assert_eq!(
+                capture.single_request().header("thread-id").as_deref(),
+                Some(thread)
+            );
         }
     }
     Ok(())

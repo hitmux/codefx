@@ -26,8 +26,12 @@ class LinuxProjection(unittest.TestCase):
                 (directory / path).parent.mkdir(parents=True)
             (upstream / path).write_text(official)
             for mutation in (
-                projected.replace("      - uses: ./.github/actions/run-argument-comment-lint\n", ""),
-                projected.replace("needs: [argument_comment_lint_prebuilt]", "needs: []"),
+                projected.replace(
+                    "      - uses: ./.github/actions/run-argument-comment-lint\n", ""
+                ),
+                projected.replace(
+                    "needs: [argument_comment_lint_prebuilt]", "needs: []"
+                ),
                 projected.replace("    steps:\n", "    if: false\n    steps:\n"),
             ):
                 with self.subTest(mutation=mutation):
@@ -221,7 +225,9 @@ class RequiredGate(unittest.TestCase):
     def test_required_call_cannot_ignore_failure_or_run_conditionally(self):
         for job in ("bazel", "sdk"):
             for condition in ("if: false", "continue-on-error: true"):
-                weakened = self.blocking.replace(f"  {job}:\n", f"  {job}:\n    {condition}\n")
+                weakened = self.blocking.replace(
+                    f"  {job}:\n", f"  {job}:\n    {condition}\n"
+                )
                 self.assertTrue(policy.gate_errors(weakened))
 
     def test_required_coverage_is_preserved(self):

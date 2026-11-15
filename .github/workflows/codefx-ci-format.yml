@@ -240,6 +240,15 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/scripts -p test_upstream_ci.py -v
           python3 -m unittest discover -s .github/scripts -p test_codefx_ci.py -v
+      - name: Check out the pinned official CI baseline
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: openai/codex
+          ref: 6ff1e1ca3b30fc8b914720681fcf5fe62e95f856 # rust-v0.166.0
+          path: .tmp/upstream-ci
+          persist-credentials: false
+      - name: Verify the official Linux graph before expensive builds
+        run: python3 .github/scripts/check_upstream_ci.py --upstream .tmp/upstream-ci
       - name: Produce formatting patch in CI
         shell: bash
         run: |
