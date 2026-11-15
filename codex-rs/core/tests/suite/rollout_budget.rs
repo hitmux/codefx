@@ -229,7 +229,7 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
                                 })
                         })
                     })
-                })
+            })
         },
         sse(vec![ev_completed("worker-notice-acknowledged")]),
     )

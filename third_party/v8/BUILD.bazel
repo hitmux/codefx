@@ -791,8 +791,14 @@ v8_artifact_files(
         profile = "sandbox_release",
         v8_cpu = cpu,
     )
-    for arch, cpu in [("x86_64", "x64"), ("aarch64", "arm64")]
-    for libc in ["gnu", "musl"]
+    for arch, cpu in [
+        ("x86_64", "x64"),
+        ("aarch64", "arm64"),
+    ]
+    for libc in [
+        "gnu",
+        "musl",
+    ]
 ]
 
 v8_artifact_files(
