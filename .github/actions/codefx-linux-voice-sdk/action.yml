@@ -68,4 +68,7 @@ runs:
         echo "GST_PLUGIN_SYSTEM_PATH_1_0=$sdk/runtime/lib/gstreamer-1.0" >> "$GITHUB_ENV"
         echo "GST_PLUGIN_PATH_1_0=$sdk/runtime/lib/gstreamer-1.0" >> "$GITHUB_ENV"
         echo "GST_REGISTRY=$RUNNER_TEMP/codefx-voice-registry.bin" >> "$GITHUB_ENV"
+        # Load the receipt-verified plugins directly in Cargo tests, just as the
+        # packaged helper does. A host GStreamer scanner can have a different ABI.
+        echo "CODEX_TEST_VOICE_RUNTIME=$sdk/runtime" >> "$GITHUB_ENV"
         PKG_CONFIG_PATH="$sdk/lib/pkgconfig" "$wrapper" --atleast-version=1.28 gstreamer-audio-1.0

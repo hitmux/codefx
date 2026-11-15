@@ -326,8 +326,14 @@ async fn api_key_cyber_access_program_server_rejection_does_not_fall_back() -> R
     let thread = app
         .start_thread(ThreadStartParams {
             config: Some(BTreeMap::from([
-                ("model_providers.openai.request_max_retries".to_owned(), json!(0)),
-                ("model_providers.openai.stream_max_retries".to_owned(), json!(0)),
+                (
+                    "model_providers.openai.request_max_retries".to_owned(),
+                    json!(0),
+                ),
+                (
+                    "model_providers.openai.stream_max_retries".to_owned(),
+                    json!(0),
+                ),
             ])),
             ..Default::default()
         })

@@ -218,6 +218,11 @@ async fn nested_apply_patch_alias_works_with_restricted_reads() -> anyhow::Resul
     let binary = codex_utils_cargo_bin::cargo_bin("codex-exec")?.canonicalize()?;
     let binary_dir = serde_json::to_string(binary.parent().expect("binary directory"))?;
     let codex_home = serde_json::to_string(test.home_path())?;
+    // The generated executable aliases live below CODEX_HOME. Permit only that
+    // helper directory while keeping credentials and the sentinel unreadable.
+    let aliases = serde_json::to_string(
+        &test.home_path().join("tmp").join(format!("arg0-{}", std::env::consts::OS)),
+    )?;
     fs::write(
         test.home_path().join("config.toml"),
         format!(
@@ -231,6 +236,7 @@ shell_snapshot_v2 = false
 ":project_roots" = "write"
 {binary_dir} = "read"
 {codex_home} = "none"
+{aliases} = "read"
 "#
         ),
     )?;

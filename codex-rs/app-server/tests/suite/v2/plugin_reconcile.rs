@@ -57,7 +57,7 @@ async fn login_and_reconcile_preserve_local_plugins_and_skills(
         .path()
         .join("plugins/cache/local/sample/local/.codex-plugin/plugin.json");
     for (file, content) in [(&skill, "local skill"), (&plugin, "{\"name\":\"sample\"}")] {
-        std::fs::create_dir_all(file.parent().unwrap())?;
+        std::fs::create_dir_all(file.parent().expect("local fixture has a parent"))?;
         std::fs::write(file, content)?;
     }
     let original_config = std::fs::read(codex_home.path().join("config.toml"))?;
@@ -110,7 +110,7 @@ async fn login_and_reconcile_preserve_local_plugins_and_skills(
         server
             .received_requests()
             .await
-            .unwrap()
+            .expect("wiremock records requests")
             .iter()
             .all(|request| {
                 !request.url.path().contains("/ps/plugins/") && request.url.path() != "/bundle"

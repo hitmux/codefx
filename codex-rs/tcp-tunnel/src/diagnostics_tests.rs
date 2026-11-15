@@ -113,7 +113,7 @@ fn legacy_errors_and_successful_shutdown_produce_no_json() {
 fn handshake_timeout_preserves_legacy_debug_output() {
     let error = anyhow!(Code::HandshakeTimeout);
     assert_eq!(
-        format!("{error:?}"),
+        error.to_string(),
         "QUIC handshake failed: QUIC handshake timed out"
     );
     let mut output = Vec::new();

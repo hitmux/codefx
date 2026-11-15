@@ -1,4 +1,4 @@
-//! Marketplace startup failures reach the warning notice and its details view.
+//! Warning notifications reach the warning notice and its details view.
 
 use super::*;
 use crate::app::owned_transcript::tests::buffer_text;
@@ -9,7 +9,7 @@ use codex_config::MarketplaceConfigUpdate;
 use codex_config::record_user_marketplace;
 
 #[tokio::test]
-async fn automatic_marketplace_upgrade_failure_shows_warning() -> Result<()> {
+async fn marketplace_upgrade_warning_notification_shows_details() -> Result<()> {
     let (mut app, mut events, _ops) = make_test_app_with_channels().await;
     let source = tempdir()?;
     std::fs::create_dir_all(source.path().join(".agents/plugins"))?;
@@ -65,18 +65,20 @@ async fn automatic_marketplace_upgrade_failure_shows_warning() -> Result<()> {
     while events.try_recv().is_ok() {}
 
     let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
-    let mut warnings_received = 0;
-    while warnings_received < marketplace_names.len() {
-        let event = server.next_event().await.expect("app-server notification");
-        let is_warning = matches!(
-            &event.event,
-            AppServerEvent::ServerNotification(notification)
-                if matches!(notification.as_ref(), ServerNotification::Warning(_))
-        );
-        app.handle_backend_event(&server, event).await;
-        if is_warning {
-            warnings_received += 1;
-        }
+    // Automatic marketplace updates are disabled. Exercise the warning UI with
+    // explicit notifications instead of waiting for an automatic Git operation.
+    for marketplace in marketplace_names {
+        app.handle_app_server_event(
+            &server,
+            AppServerEvent::ServerNotification(Box::new(ServerNotification::Warning(
+                codex_app_server_protocol::WarningNotification {
+                    thread_id: None,
+                    message: format!(
+                        "Codex could not update marketplace `{marketplace}`: upgraded marketplace name `other` does not match configured marketplace `{marketplace}`"
+                    ),
+                },
+            ))),
+        ).await;
     }
 
     let mut tui = crate::tui::test_support::make_test_tui()?;

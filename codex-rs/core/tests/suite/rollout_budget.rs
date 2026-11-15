@@ -206,9 +206,9 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
     mount_sse_once_match(
         &server,
         |request: &wiremock::Request| {
-            request.body_json::<serde_json::Value>().is_ok_and(|body| {
-                body["client_metadata"]["x-codex-parent-thread-id"].is_string()
-            })
+            request
+                .body_json::<serde_json::Value>()
+                .is_ok_and(|body| body["client_metadata"]["x-codex-parent-thread-id"].is_string())
         },
         sse(vec![
             ev_response_created("child-1"),
@@ -220,9 +220,9 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
         &server,
         |request: &wiremock::Request| {
             wire_request_contains(request, SPAWN_CALL_ID)
-                && request.body_json::<serde_json::Value>().is_ok_and(|body| {
-                    body["client_metadata"]["x-codex-parent-thread-id"].is_null()
-                })
+                && request
+                    .body_json::<serde_json::Value>()
+                    .is_ok_and(|body| body["client_metadata"]["x-codex-parent-thread-id"].is_null())
         },
         sse(vec![
             ev_response_created("root-2"),

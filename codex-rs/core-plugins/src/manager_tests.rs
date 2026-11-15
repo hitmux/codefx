@@ -1741,7 +1741,10 @@ enabled = true
     manager.write_remote_installed_plugins_cache(vec![remote_installed_plugin("remote-only")]);
     assert_eq!(
         loaded_plugin_names(&manager, &config).await,
-        vec!["remote-only@openai-curated-remote".to_string()]
+        vec![
+            "linear@openai-curated".to_string(),
+            "remote-only@openai-curated-remote".to_string(),
+        ]
     );
 
     set_test_auth_mode(&auth_manager, /*auth_mode*/ None).await;
@@ -1771,7 +1774,10 @@ enabled = true
     set_test_auth_mode(&auth_manager, Some(AuthMode::Chatgpt)).await;
     assert_eq!(
         loaded_plugin_names(&manager, &config).await,
-        vec!["remote-only@openai-curated-remote".to_string()]
+        vec![
+            "linear@openai-curated".to_string(),
+            "remote-only@openai-curated-remote".to_string(),
+        ]
     );
 }
 

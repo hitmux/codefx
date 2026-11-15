@@ -201,7 +201,8 @@ async fn thread_creator_survives_resume_and_forks_use_current_auth() -> Result<(
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn new_thread_is_recorded_in_state_db() -> Result<()> {
     let server = start_mock_server().await;
-    let _response = mount_sse_once(&server, responses::sse(vec![ev_completed("materialize")])).await;
+    let _response =
+        mount_sse_once(&server, responses::sse(vec![ev_completed("materialize")])).await;
     let mut builder = test_codex().with_config(|config| {
         config
             .features
