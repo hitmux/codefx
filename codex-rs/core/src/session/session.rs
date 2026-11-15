@@ -1228,9 +1228,7 @@ impl Session {
         let mcp_disabled_plugin_ids = session_configuration.disabled_plugin_ids.clone();
         let auth_and_mcp_fut = async move {
             let auth = mcp_auth.await;
-            if codex_core_plugins::AUTOMATIC_PLUGIN_UPDATES_ENABLED
-                && config_for_mcp.features.plugin_recommendations_enabled()
-            {
+            if config_for_mcp.features.plugin_recommendations_enabled() {
                 let plugins_config = config_for_mcp.plugins_config_input();
                 let auth_for_prewarm = auth.clone();
                 // Fetch the catalog while MCP and plugin/skill initialization continue.

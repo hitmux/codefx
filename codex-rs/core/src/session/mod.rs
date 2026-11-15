@@ -4735,7 +4735,7 @@ impl Session {
             .plugins_for_config(&turn_context.config.plugins_config_input())
             .await
             .without_plugins(&turn_context.disabled_plugin_ids);
-        let recommended_plugin_candidates = if codex_core_plugins::AUTOMATIC_PLUGIN_UPDATES_ENABLED && turn_context
+        let recommended_plugin_candidates = if turn_context
             .config
             .features
             .plugin_recommendations_enabled()

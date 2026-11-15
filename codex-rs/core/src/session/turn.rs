@@ -1921,7 +1921,7 @@ pub(crate) async fn prepare_tool_recommendations(
     } else {
         None
     };
-    let endpoint_candidates = if codex_core_plugins::AUTOMATIC_PLUGIN_UPDATES_ENABLED && tool_suggest_is_enabled {
+    let endpoint_candidates = if tool_suggest_is_enabled {
         let plugins_config = turn_context.config.plugins_config_input();
         sess.services
             .plugins_manager
