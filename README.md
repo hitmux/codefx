@@ -15,9 +15,9 @@ If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="http
 
 [Codefx CLI 0.166.0](https://github.com/hitmux/codefx/releases/tag/rust-v0.166.0) is a stable release. Current development, CI and new releases target Linux amd64 only:
 
-| Platform     | Architectures        |
-| ------------ | -------------------- |
-| Linux (musl) | amd64 (x86_64)       |
+| Platform     | Architectures  |
+| ------------ | -------------- |
+| Linux (musl) | amd64 (x86_64) |
 
 Use the reviewed installers below or the [verified installer bundle](https://github.com/hitmux/codefx/releases/download/rust-v0.166.0/codefx-installers-38f48572fe9f.zip). The original `rust-v0.166.0` source archive contains historical wrappers that uninstall existing packages before downloading; the revised installers are maintained independently of that binary build tag.
 
