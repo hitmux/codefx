@@ -256,7 +256,7 @@ class LinuxProjection(unittest.TestCase):
         projected = policy.linux_projection(
             ".github/workflows/rust-ci-full.yml", source
         )
-        self.assertIn("USE_SCCACHE: 'true'", projected)
+        self.assertIn('USE_SCCACHE: "true"', projected)
         self.assertNotIn("aarch64", projected)
         self.assertNotIn("macos-15", projected)
         self.assertNotIn("windows", projected)
