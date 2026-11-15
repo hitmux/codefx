@@ -7556,14 +7556,18 @@ async fn account_changes_never_start_plugin_sync_even_with_remote_features_enabl
         assert_eq!(loaded.effective_plugin_skill_roots().len(), 1);
         assert_eq!(fs::read(&plugin_skill).unwrap(), original_plugin_skill);
         let auth = auth_manager.auth_cached();
-        manager.maybe_start_curated_repo_sync_for_config(&config, /*on_effective_plugins_changed*/ None);
+        manager.maybe_start_curated_repo_sync_for_config(
+            &config, /*on_effective_plugins_changed*/ None,
+        );
         manager.maybe_start_remote_plugin_caches_refresh(
             &config,
             auth.clone(),
             /*prefetch_recommendations*/ true,
             /*on_effective_plugins_changed*/ None,
         );
-        manager.maybe_start_remote_installed_plugin_bundle_sync(&config, auth, /*on_effective_plugins_changed*/ None);
+        manager.maybe_start_remote_installed_plugin_bundle_sync(
+            &config, auth, /*on_effective_plugins_changed*/ None,
+        );
         manager.maybe_start_plugin_startup_tasks_for_config(
             &config,
             /*prefetch_discovery*/ true,
