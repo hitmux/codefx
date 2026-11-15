@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           case "$TARGET" in
-            x86_64-unknown-linux-musl|aarch64-unknown-linux-musl) ;;
+            x86_64-unknown-linux-musl) ;;
             *) echo "Unsupported Codefx release target: $TARGET" >&2; exit 1 ;;
           esac
           cp scripts/install/release_package.py "$RUNNER_TEMP/codefx-release-package.py"

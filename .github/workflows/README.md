@@ -7,7 +7,8 @@ the immutable upstream baseline, coverage requirements and allowed adaptations.
 It requires the official Linux Bazel graph and workspace argument-comment lint,
 fast Rust checks, complete GNU Cargo package test coverage and Clippy,
 SDK tests, dependency/repository policy, installer safety and current-source
-x86_64/ARM64 musl packages. Failed, cancelled or unexpectedly skipped dependencies
+amd64 musl packages. ARM64, macOS and Windows are outside the supported matrix.
+Failed, cancelled or unexpectedly skipped dependencies
 fail the aggregate.
 
 `codefx-linux-cargo.yml` partitions workspace packages before compilation so a
@@ -24,7 +25,7 @@ or manually. `postmerge-ci.yml` retains full Linux Cargo and V8 validation.
 Full Cargo includes remote-environment tests and also supports manual execution
 and `full-ci` branches.
 
-For an upstream upgrade or release, run full Linux validation and both native
-package checks on the final candidate. A green fast gate is not a full CI pass.
+For an upstream upgrade or release, run full Linux amd64 validation and its native
+package check on the final candidate. A green fast gate is not a full CI pass.
 Use Actions run links and exact commits when reporting results. Branch protection
 must explicitly require the aggregate; workflows do not configure it themselves.

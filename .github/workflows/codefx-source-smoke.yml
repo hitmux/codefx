@@ -15,8 +15,6 @@ jobs:
         include:
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-musl
-          - runner: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-musl
     env:
       TARGET: ${{ matrix.target }}
       CARGO_PROFILE_RELEASE_DEBUG: "0"
@@ -71,7 +69,6 @@ jobs:
           set -euo pipefail
           case "$TARGET" in
             x86_64-unknown-linux-musl) machine='Advanced Micro Devices X86-64' ;;
-            aarch64-unknown-linux-musl) machine='AArch64' ;;
             *) exit 1 ;;
           esac
           for name in codex codex-code-mode-host codex-exec-server bwrap; do

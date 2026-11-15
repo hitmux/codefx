@@ -121,10 +121,8 @@ jobs:
       run:
         working-directory: codex-rs
     env:
-      # Speed up repeated builds across CI runs by caching compiled objects, except on
-      # arm64 macOS runners cross-targeting x86_64 where ring/cc-rs can produce
-      # mixed-architecture archives under sccache.
-      USE_SCCACHE: ${{ (startsWith(matrix.runner, 'windows') || (matrix.runner == 'macos-15-xlarge' && matrix.target == 'x86_64-apple-darwin')) && 'false' || 'true' }}
+      # Speed up repeated builds across CI runs by caching compiled objects.
+      USE_SCCACHE: 'true'
       CARGO_INCREMENTAL: "0"
       SCCACHE_CACHE_SIZE: 10G
 
@@ -138,17 +136,8 @@ jobs:
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             profile: dev
-          - runner: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-musl
-            profile: dev
-          - runner: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-            profile: dev
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-musl
-            profile: release
-          - runner: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-musl
             profile: release
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -172,7 +161,7 @@ jobs:
           targets: ${{ matrix.target }}
           components: clippy
 
-      - if: ${{ matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'aarch64-unknown-linux-musl'}}
+      - if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
         name: Use hermetic Cargo home (musl)
         shell: bash
         run: |
@@ -249,7 +238,7 @@ jobs:
             sccache-${{ matrix.runner }}-${{ matrix.target }}-${{ matrix.profile }}-${{ steps.lockhash.outputs.hash }}-
             sccache-${{ matrix.runner }}-${{ matrix.target }}-${{ matrix.profile }}-
 
-      - if: ${{ matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'aarch64-unknown-linux-musl'}}
+      - if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
         name: Prepare APT cache directories (musl)
         shell: bash
         run: |
@@ -257,7 +246,7 @@ jobs:
           sudo mkdir -p /var/cache/apt/archives /var/lib/apt/lists
           sudo chown -R "$USER:$USER" /var/cache/apt /var/lib/apt/lists
 
-      - if: ${{ matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'aarch64-unknown-linux-musl'}}
+      - if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
         name: Restore APT cache (musl)
         id: cache_apt_restore
         uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
@@ -266,13 +255,13 @@ jobs:
             /var/cache/apt
           key: apt-${{ matrix.runner }}-${{ matrix.target }}-v1
 
-      - if: ${{ matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'aarch64-unknown-linux-musl'}}
+      - if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
         name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.14.0
 
-      - if: ${{ matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'aarch64-unknown-linux-musl'}}
+      - if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
         name: Install musl build tools
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -358,7 +347,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save APT cache (musl)
-        if: always() && !cancelled() && (matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'aarch64-unknown-linux-musl') && steps.cache_apt_restore.outputs.cache-hit != 'true'
+        if: always() && !cancelled() && matrix.target == 'x86_64-unknown-linux-musl' && steps.cache_apt_restore.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
@@ -378,17 +367,6 @@ jobs:
       use_sccache: true
     secrets: inherit
 
-  tests_linux_arm64:
-    name: Tests — ubuntu-24.04-arm - aarch64-unknown-linux-gnu
-    uses: ./.github/workflows/rust-ci-full-nextest-platform.yml
-    with:
-      runner: ubuntu-24.04-arm
-      target: aarch64-unknown-linux-gnu
-      profile: ci-test
-      artifact_id: linux-arm64
-      use_sccache: true
-    secrets: inherit
-
   results:
     name: Full CI results
     needs:
@@ -399,7 +377,6 @@ jobs:
         argument_comment_lint_prebuilt,
         lint_build,
         tests_linux_x64_remote,
-        tests_linux_arm64,
       ]
     if: always()
     runs-on: ubuntu-24.04
@@ -413,14 +390,12 @@ jobs:
           echo "shear  : ${{ needs.cargo_shear.result }}"
           echo "lint   : ${{ needs.lint_build.result }}"
           echo "test linux : ${{ needs.tests_linux_x64_remote.result }}"
-          echo "test arm64 : ${{ needs.tests_linux_arm64.result }}"
           [[ '${{ needs.argument_comment_lint_package.result }}' == 'success' ]] || { echo 'argument_comment_lint_package failed'; exit 1; }
           [[ '${{ needs.argument_comment_lint_prebuilt.result }}' == 'success' ]] || { echo 'argument_comment_lint_prebuilt failed'; exit 1; }
           [[ '${{ needs.general.result }}' == 'success' ]] || { echo 'general failed'; exit 1; }
           [[ '${{ needs.cargo_shear.result }}' == 'success' ]] || { echo 'cargo_shear failed'; exit 1; }
           [[ '${{ needs.lint_build.result }}' == 'success' ]] || { echo 'lint_build failed'; exit 1; }
           [[ '${{ needs.tests_linux_x64_remote.result }}' == 'success' ]] || { echo 'tests_linux_x64_remote failed'; exit 1; }
-          [[ '${{ needs.tests_linux_arm64.result }}' == 'success' ]] || { echo 'tests_linux_arm64 failed'; exit 1; }
 
       - name: sccache summary note
         if: always()

@@ -15,7 +15,12 @@ import subprocess
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
-REMOVED_RESULTS = ("tests_macos_aarch64", "tests_windows_x64", "tests_windows_arm64")
+REMOVED_RESULTS = (
+    "tests_macos_aarch64",
+    "tests_windows_x64",
+    "tests_windows_arm64",
+    "tests_linux_arm64",
+)
 PLATFORM_WORKFLOWS = {"bazel.yml", "rust-ci.yml", "rust-ci-full.yml", "v8-canary.yml"}
 RUNNER_ADAPTER = """    - name: Adapt Codefx hosted Linux resources
       if: runner.os == 'Linux'
@@ -68,12 +73,20 @@ LINUX_RUNTIME_RESTORE = """            (cd "$helper_dir" && sha256sum --check bw
 SDK_PACKAGE_STEPS = '      - name: Download the same-run current source package\n        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1\n        with:\n          name: codefx-source-x86_64-unknown-linux-musl\n          path: ${{ runner.temp }}/sdk-package\n\n      - name: Verify candidate provenance and stage SDK executables\n        run: python3 scripts/install/prepare_sdk_package.py --directory "$RUNNER_TEMP/sdk-package" --output "$RUNNER_TEMP/sdk-runtime"\n\n      - name: Warm up the current source CLI\n        run: \'"${CODEX_EXEC_PATH}" --version\'\n\n'
 
 
+def supported_linux_matrix_entry(match: re.Match[str]) -> str:
+    entry = match.group()
+    targets = re.findall(r"(?m)^            target: (.+)$", entry)
+    if targets:
+        return entry if all(target in ("x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl") for target in targets) else ""
+    return entry if re.search(r"(?m)^          - (?:os|runner): ubuntu[^\n]*$|^            runner: ubuntu[^\n]*$", entry) and not re.search(r"ubuntu[^\n]*-arm", entry) else ""
+
+
 def linux_projection(path: str, text: str) -> str:
     """Apply the documented, bounded differences to official file contents."""
     name = Path(path).name
     if name in PLATFORM_WORKFLOWS:
         text = re.sub(
-            r"(?ms)^  (?:test-windows[^:]*|tests_windows[^:]*|tests_macos[^:]*|build-windows[^:]*):\n"
+            r"(?ms)^  (?:test-windows[^:]*|tests_windows[^:]*|tests_macos[^:]*|tests_linux_arm64|build-windows[^:]*):\n"
             r".*?(?=^  [a-zA-Z_][\w-]*:|\Z)",
             "",
             text,
@@ -81,16 +94,7 @@ def linux_projection(path: str, text: str) -> str:
         text = re.sub(
             r"(?ms)^          - (?:os|name|runner):.*?"
             r"(?=^          - (?:os|name|runner):|^    \S|\Z)",
-            lambda match: (
-                match.group()
-                if re.search(
-                    r"^            (?:runner|target): .*(?:linux|ubuntu)|"
-                    r"^          - (?:os|runner): ubuntu",
-                    match.group(),
-                    re.M,
-                )
-                else ""
-            ),
+            supported_linux_matrix_entry,
             text,
         )
         for result in REMOVED_RESULTS:
@@ -119,6 +123,15 @@ def linux_projection(path: str, text: str) -> str:
         text = text.replace(
             "name: Bazel test on ${{ matrix.os }} for ${{ matrix.target }}",
             "name: Bazel native GNU tests on ${{ matrix.os }}",
+        )
+    if name == "rust-ci-full.yml":
+        text = text.replace(
+            "      USE_SCCACHE: ${{ (startsWith(matrix.runner, 'windows') || (matrix.runner == 'macos-15-xlarge' && matrix.target == 'x86_64-apple-darwin')) && 'false' || 'true' }}",
+            "      USE_SCCACHE: 'true'",
+        )
+        text = text.replace(
+            "matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'aarch64-unknown-linux-musl'",
+            "matrix.target == 'x86_64-unknown-linux-musl'",
         )
     if name == "sdk.yml":
         text = re.sub(
@@ -319,7 +332,6 @@ def coverage_errors(root: Path) -> list[str]:
         ),
         ".github/workflows/codefx-source-smoke.yml": (
             "target: x86_64-unknown-linux-musl",
-            "target: aarch64-unknown-linux-musl",
             'readelf -h "$binary"',
             "run: python3 scripts/install/smoke_source_package.py",
         ),
@@ -332,6 +344,14 @@ def coverage_errors(root: Path) -> list[str]:
                 errors.append(f"Missing coverage contract in {path}: {command}")
         if re.search(r"(?m)^\s*if: false|^    continue-on-error: true", text):
             errors.append(f"Coverage cannot ignore failure or be disabled: {path}")
+    for name in (
+        "bazel.yml", "rust-ci.yml", "rust-ci-full.yml", "v8-canary.yml",
+        "codefx-source-smoke.yml", "codefx-platform-release.yml",
+        "codefx-native-smoke.yml", "codefx-publish-verified.yml",
+    ):
+        text = comparable((root / ".github/workflows" / name).read_text())
+        if re.search(r"\b(?:target|targets):[^\n]*(?:aarch64|arm64|apple-darwin|windows)|\b(?:runner|runs-on|os):[^\n]*(?:-arm|macos|windows)", text):
+            errors.append(f"Only Linux amd64 targets and runners are supported: {name}")
     return errors
 
 

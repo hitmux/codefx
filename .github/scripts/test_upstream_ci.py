@@ -1,6 +1,7 @@
 """Regression coverage for accidentally weakened Linux CI gates."""
 
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 
@@ -95,14 +96,20 @@ class LinuxProjection(unittest.TestCase):
             "jobs:\n  test:\n    strategy:\n      matrix:\n        include:\n"
             "          - os: macos-15-xlarge\n            target: aarch64-apple-darwin\n"
             "          - os: ubuntu-24.04\n            target: x86_64-unknown-linux-gnu\n"
+            "          - os: ubuntu-24.04\n            target: x86_64-unknown-linux-musl\n"
+            "          - os: ubuntu-24.04-arm\n            target: aarch64-unknown-linux-gnu\n"
+            "          - os: ubuntu-24.04-arm\n            target: aarch64-unknown-linux-musl\n"
             "          - os: windows-latest\n            target: x86_64-pc-windows-msvc\n"
             "    steps:\n      - run: bazel test //...\n"
         )
-        projected = policy.linux_projection(".github/workflows/bazel.yml", source)
+        projected = policy.linux_projection(".github/workflows/rust-ci-full.yml", source)
         self.assertIn("target: x86_64-unknown-linux-gnu", projected)
+        self.assertIn("target: x86_64-unknown-linux-musl", projected)
         self.assertIn("run: bazel test //...", projected)
         self.assertNotIn("target: aarch64-apple-darwin", projected)
         self.assertNotIn("target: x86_64-pc-windows-msvc", projected)
+        self.assertNotIn("target: aarch64-unknown-linux-gnu", projected)
+        self.assertNotIn("target: aarch64-unknown-linux-musl", projected)
 
     def test_named_linux_lint_matrix_is_retained(self):
         source = (
@@ -217,25 +224,55 @@ class LinuxProjection(unittest.TestCase):
             (root / path).write_text(official)
             self.assertEqual(policy.baseline_errors(root, upstream, [path]), [])
 
-    def test_full_ci_keeps_linux_fan_in_and_removes_platform_jobs(self):
+    def test_full_ci_keeps_amd64_fan_in_and_removes_other_platform_jobs(self):
         source = (
             "jobs:\n  tests_macos_aarch64:\n    run: macos\n"
-            "  tests_linux_arm64:\n    run: linux\n"
+            "  tests_linux_x64_remote:\n    run: linux\n"
+            "  tests_linux_arm64:\n    run: arm\n"
             "  tests_windows_x64:\n    run: windows\n"
-            "  results:\n    needs:\n      - tests_linux_arm64\n"
+            "  results:\n    needs:\n      - tests_linux_x64_remote\n      - tests_linux_arm64\n"
             "      - tests_macos_aarch64\n      - tests_windows_x64\n"
             "    run: summarize\n"
         )
         projected = policy.linux_projection(
             ".github/workflows/rust-ci-full.yml", source
         )
-        self.assertIn("tests_linux_arm64", projected)
+        self.assertIn("tests_linux_x64_remote", projected)
+        self.assertNotIn("tests_linux_arm64", projected)
         self.assertIn("run: summarize", projected)
         self.assertNotIn("tests_macos_aarch64", projected)
         self.assertNotIn("tests_windows_x64", projected)
 
+    def test_full_ci_removes_arm64_only_conditions(self):
+        source = (
+            "jobs:\n  lint_build:\n"
+            "    env:\n"
+            "      USE_SCCACHE: ${{ (startsWith(matrix.runner, 'windows') || (matrix.runner == 'macos-15-xlarge' && matrix.target == 'x86_64-apple-darwin')) && 'false' || 'true' }}\n"
+            "    steps:\n"
+            "      - if: ${{ matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'aarch64-unknown-linux-musl'}}\n"
+        )
+        projected = policy.linux_projection(
+            ".github/workflows/rust-ci-full.yml", source
+        )
+        self.assertIn("USE_SCCACHE: 'true'", projected)
+        self.assertNotIn("aarch64", projected)
+        self.assertNotIn("macos-15", projected)
+        self.assertNotIn("windows", projected)
+
 
 class RequiredGate(unittest.TestCase):
+    def test_unsupported_architectures_cannot_return_to_custom_matrices(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            shutil.copytree(policy.ROOT / ".github/workflows", root / ".github/workflows")
+            self.assertEqual(policy.coverage_errors(root), [])
+            for name in ("codefx-source-smoke.yml", "codefx-platform-release.yml"):
+                path = root / ".github/workflows" / name
+                original = path.read_text()
+                path.write_text(original + "\n          - runner: ubuntu-24.04-arm\n            target: aarch64-unknown-linux-musl\n")
+                self.assertTrue(policy.coverage_errors(root))
+                path.write_text(original)
+
     def setUp(self):
         self.blocking = (policy.ROOT / ".github/workflows/blocking-ci.yml").read_text()
 

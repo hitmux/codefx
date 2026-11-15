@@ -1,6 +1,6 @@
 # Codefx 安装与升级
 
-安装脚本在 Linux、macOS 和 Windows 上提供同一套安全切换流程，支持各系统的 x86_64 和 ARM64 架构。Linux 使用 musl 安装包；macOS 自动识别 Apple Silicon，包括 Rosetta 终端；Windows 使用原生 PowerShell 脚本。
+当前开发、CI 和新版本发布仅支持 Linux amd64（x86_64），使用 musl 安装包。安装脚本保留历史发布的跨平台兼容逻辑，下文中的 macOS、Windows 和 ARM64 说明仅用于维护已有安装。
 
 安装包是否可用，以对应 Release 的附件和本平台 `.sha256` 文件（或旧版 `codex-package_SHA256SUMS`）为准。缺少本机安装包或校验记录时，安装会退出并保留原版本。32 位系统不受支持。
 

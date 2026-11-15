@@ -1,6 +1,6 @@
 # Codefx Linux CI coverage policy
 
-Codefx supports Linux x86_64 and ARM64. Every build, test, formatter and generator
+Codefx supports Linux amd64 (x86_64) only. Every build, test, formatter and generator
 runs in GitHub Actions. Local work is limited to source edits and static review.
 
 ## Candidate and upstream provenance
@@ -32,8 +32,8 @@ packages never substitute for the candidate.
   an independently installed Python SDK smoke test.
 - Dependency/security policy, repository/architecture checks, spelling and size.
 - Installer transaction, rollback and failure tests.
-- Current-source x86_64/ARM64 musl release-configuration builds, native ELF/ABI
-  checks including execution of the V8 ABI probe on each native runner, package
+- Current-source amd64 musl release-configuration builds, native ELF/ABI
+  checks including execution of the V8 ABI probe on the native runner, package
   validation, actual installation and reinstallation.
 
 Every required dependency must succeed. Failure, cancellation, an unexpected
@@ -48,8 +48,8 @@ Linux Cargo and V8 verification;
 `rust-ci-full.yml` also supports manual runs and `full-ci` branches. The expensive
 workspace argument-comment lint remains in full Cargo CI.
 
-Full verification must pass on the source being released, together with both
-native package checks. A successful fast gate does not establish full-suite or
+Full verification must pass on the source being released, together with the
+amd64 native package check. A successful fast gate does not establish full-suite or
 release readiness. Upstream syncs must run full Linux verification before release.
 Branch protection must explicitly require `CI required`; the job name alone does
 not configure GitHub protection. This PR does not change repository settings.
@@ -58,7 +58,7 @@ not configure GitHub protection. This PR does not change repository settings.
 
 The policy checker permits only these reviewed transformations:
 
-- Remove unsupported Windows/macOS runners and retired upstream publishers.
+- Remove unsupported Windows, macOS and ARM64 runners and retired upstream publishers.
 - Replace private Linux runners with hosted Ubuntu and allow cold-build budgets.
 - Replace the SDK's Bazel CLI build with a verified same-run source package,
   preserving SDK commands and running Jest serially on the small runner.
@@ -96,5 +96,5 @@ transport failure may try another source. These rules have CI fault coverage.
 Update the source version, manifest and policy checkout together. Retain upstream
 commands except for the listed transformations. Update regression tests whenever
 upstream changes job structure. Run fast, full and native package checks against
-one final candidate and report exact commits and Actions links. Pending, skipped,
+one final amd64 candidate and report exact commits and Actions links. Pending, skipped,
 cancelled and unavailable checks are never reported as passes.

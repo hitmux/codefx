@@ -97,18 +97,6 @@ jobs:
             sandbox: true
             target: x86_64-unknown-linux-gnu
             variant: ptrcomp-sandbox
-          - runner: ubuntu-24.04-arm
-            bazel_config: ci-v8
-            platform: linux_arm64
-            sandbox: false
-            target: aarch64-unknown-linux-gnu
-            variant: release
-          - runner: ubuntu-24.04-arm
-            bazel_config: ci-v8
-            platform: linux_arm64
-            sandbox: true
-            target: aarch64-unknown-linux-gnu
-            variant: ptrcomp-sandbox
           - runner: ubuntu-24.04
             bazel_config: ci-v8
             platform: linux_amd64_musl
@@ -120,18 +108,6 @@ jobs:
             platform: linux_amd64_musl
             sandbox: true
             target: x86_64-unknown-linux-musl
-            variant: ptrcomp-sandbox
-          - runner: ubuntu-24.04-arm
-            bazel_config: ci-v8
-            platform: linux_arm64_musl
-            sandbox: false
-            target: aarch64-unknown-linux-musl
-            variant: release
-          - runner: ubuntu-24.04-arm
-            bazel_config: ci-v8
-            platform: linux_arm64_musl
-            sandbox: true
-            target: aarch64-unknown-linux-musl
             variant: ptrcomp-sandbox
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

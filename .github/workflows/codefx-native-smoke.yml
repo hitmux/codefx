@@ -27,7 +27,7 @@ jobs:
           import json, os, re, subprocess
           tag = os.environ['RELEASE_TAG']
           assert re.fullmatch(r'rust-v[0-9]+\.[0-9]+\.[0-9]+', tag)
-          pairs = [('ubuntu-24.04','x86_64-unknown-linux-musl'), ('ubuntu-24.04-arm','aarch64-unknown-linux-musl')]
+          pairs = [('ubuntu-24.04','x86_64-unknown-linux-musl')]
           requested = os.environ['REQUESTED_TARGETS']
           if requested == 'available':
               release = json.loads(subprocess.check_output(['gh','api',f'repos/hitmux/codefx/releases/tags/{tag}']))
