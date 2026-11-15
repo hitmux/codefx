@@ -214,9 +214,21 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
     mount_sse_once_match(
         &server,
         |request: &wiremock::Request| {
-            wire_request_contains(request, "Message Type: FINAL_ANSWER")
-                && wire_request_body(request).is_some_and(|body| {
-                    body["client_metadata"]["x-codex-parent-thread-id"].is_null()
+            wire_request_body(request).is_some_and(|body| {
+                body["client_metadata"]["x-codex-parent-thread-id"].is_null()
+                    && body["input"].as_array().is_some_and(|items| {
+                        items.iter().any(|item| {
+                            item["type"] == "agent_message"
+                                && item["recipient"] == "/root"
+                                && item["content"].as_array().is_some_and(|parts| {
+                                    parts.iter().any(|part| {
+                                        part["text"].as_str().is_some_and(|text| {
+                                            text.starts_with("Message Type: FINAL_ANSWER")
+                                        })
+                                    })
+                                })
+                        })
+                    })
                 })
         },
         sse(vec![ev_completed("worker-notice-acknowledged")]),
