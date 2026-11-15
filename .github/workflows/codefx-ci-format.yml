@@ -218,6 +218,10 @@ jobs:
           node-version-file: .nvmrc
       - name: Prepare formatters from repository locks
         run: pnpm install --frozen-lockfile
+      - name: Verify CI policy regression guards
+        run: |
+          python3 -m unittest discover -s .github/scripts -p test_upstream_ci.py -v
+          python3 -m unittest discover -s .github/scripts -p test_codefx_ci.py -v
       - name: Produce formatting patch in CI
         shell: bash
         run: |
