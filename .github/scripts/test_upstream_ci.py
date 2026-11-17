@@ -262,6 +262,42 @@ class LinuxProjection(unittest.TestCase):
         self.assertNotIn("windows", projected)
 
 
+class BazelResourcePolicy(unittest.TestCase):
+    def test_setup_bazel_must_preserve_and_verify_the_resource_policy(self):
+        path = ".github/actions/prepare-bazel-ci/action.yml"
+        source = "        output-base: ${{ steps.setup_ci.outputs.bazel-output-base }}\n"
+        projected = policy.linux_projection(path, source)
+        self.assertIn("bazelrc:", projected)
+        self.assertIn("verify_bazel_resources.py", projected)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "root"
+            upstream = Path(temp) / "upstream"
+            for directory, content in ((root, projected), (upstream, source)):
+                file = directory / path
+                file.parent.mkdir(parents=True)
+                file.write_text(content)
+            self.assertEqual(policy.baseline_errors(root, upstream, [path]), [])
+            for original in (
+                "        bazelrc:",
+                "verify_bazel_resources.py",
+                "bazel_resource_usage.py watch",
+            ):
+                with self.subTest(original=original):
+                    (root / path).write_text(projected.replace(original, "disabled"))
+                    self.assertTrue(policy.baseline_errors(root, upstream, [path]))
+
+    def test_cold_build_budget_keeps_all_bazel_commands(self):
+        source = (
+            "jobs:\n  test:\n    timeout-minutes: 30\n"
+            "    steps:\n      - run: bazel test //...\n"
+            "      - name: Upload Bazel execution logs\n"
+        )
+        projected = policy.linux_projection(".github/workflows/bazel.yml", source)
+        self.assertIn("timeout-minutes: 360", projected)
+        self.assertIn("run: bazel test //...", projected)
+        self.assertIn("bazel_resource_usage.py report", projected)
+
+
 class RequiredGate(unittest.TestCase):
     def test_unsupported_architectures_cannot_return_to_custom_matrices(self):
         with tempfile.TemporaryDirectory() as temp:

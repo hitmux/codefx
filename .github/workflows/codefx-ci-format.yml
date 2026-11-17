@@ -260,11 +260,13 @@ jobs:
             .github/scripts/verify_cargo_workspace_manifests.py \
             .github/scripts/select_cargo_ci_packages.py \
             .github/scripts/test_codefx_ci.py \
+            .github/scripts/verify_bazel_resources.py \
+            .github/scripts/bazel_resource_usage.py \
             .github/scripts/check_ci_results.py \
             scripts/install/smoke_source_package.py \
             scripts/install/prepare_sdk_package.py \
             scripts/install/test_prepare_sdk_package.py
-          pnpm exec prettier --write .github/workflows/*.yml .github/actions/codefx-linux-v8-binding/action.yml .github/actions/setup-rusty-v8/action.yml .github/upstream-ci.json .github/CI_POLICY.md .github/workflows/README.md sdk/typescript/src/exec.ts sdk/typescript/tests/exec.test.ts sdk/typescript/tests/run.test.ts sdk/typescript/tests/testCodex.ts
+          pnpm exec prettier --write .github/workflows/*.yml .github/actions/codefx-linux-runner/action.yml .github/actions/prepare-bazel-ci/action.yml .github/actions/codefx-linux-v8-binding/action.yml .github/actions/setup-rusty-v8/action.yml .github/upstream-ci.json .github/CI_POLICY.md .github/workflows/README.md sdk/typescript/src/exec.ts sdk/typescript/tests/exec.test.ts sdk/typescript/tests/run.test.ts sdk/typescript/tests/testCodex.ts
           git diff --binary > "$RUNNER_TEMP/codefx-ci-format.patch"
           git diff --stat
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0

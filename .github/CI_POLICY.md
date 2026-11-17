@@ -67,6 +67,14 @@ The policy checker permits only these reviewed transformations:
   is supplied by explicit Cargo targets and inspected native packages.
 - Disable the local Bazel disk action cache to avoid duplicating cold build
   outputs. Repository download caches remain available; BuildBuddy is optional.
+  `setup-bazel` replaces the home bazelrc, so its `bazelrc` input must import
+  the separate runner policy. A real Bazel probe checks the effective CPU/memory
+  caps and absence of action-cache writes after setup, with an explicitly enabled
+  cache as a positive control. Bazel 9.2 uses `--disk_cache=` to disable this cache.
+- Allow six hours for the complete Bazel graph, including source-built V8 when
+  BuildBuddy credentials are unavailable. Keep all test, Clippy and release-only
+  commands. Sample free disk throughout the build and report the minimum and
+  per-directory consumption before artifact/cache uploads, including on failure.
 - Set the CI test profile to no debug information and no incremental state.
   Bound sccache to 2 GiB, share download-only Cargo caches across profiles and
   pin installed tool versions using the install action's supported `tool` input.

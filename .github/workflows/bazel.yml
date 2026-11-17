@@ -20,7 +20,7 @@ jobs:
     # signal without putting PR latency back on the critical path. When
     # Code-mode unit tests run on every Bazel target. When authenticated RBE
     # is available, the Windows-cross shards exercise the source-built V8 path.
-    timeout-minutes: 180
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -107,6 +107,10 @@ jobs:
             -- \
             "${bazel_targets[@]}"
 
+      - name: Report Bazel runner resources
+        if: always() && runner.os == 'Linux'
+        run: python3 .github/scripts/bazel_resource_usage.py report
+
       - name: Upload Bazel execution logs
         if: always() && !cancelled()
         continue-on-error: true
@@ -131,7 +135,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   clippy:
-    timeout-minutes: 180
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -211,6 +215,10 @@ jobs:
             -- \
             "${bazel_targets[@]}"
 
+      - name: Report Bazel runner resources
+        if: always() && runner.os == 'Linux'
+        run: python3 .github/scripts/bazel_resource_usage.py report
+
       - name: Upload Bazel execution logs
         if: always() && !cancelled()
         continue-on-error: true
@@ -235,7 +243,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   verify-release-build:
-    timeout-minutes: 180
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -327,6 +335,10 @@ jobs:
             --build_metadata=TAG_job=verify-bwrap \
             -- \
             //codex-rs/bwrap:bwrap
+
+      - name: Report Bazel runner resources
+        if: always() && runner.os == 'Linux'
+        run: python3 .github/scripts/bazel_resource_usage.py report
 
       - name: Upload Bazel execution logs
         if: always() && !cancelled()

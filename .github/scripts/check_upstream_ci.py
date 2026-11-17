@@ -27,6 +27,30 @@ RUNNER_ADAPTER = """    - name: Adapt Codefx hosted Linux resources
       uses: ./.github/actions/codefx-linux-runner
 
 """
+BAZEL_RESOURCE_PREPARATION = """        bazelrc: ${{ runner.os == 'Linux' && format('import {0}/codefx-linux.bazelrc', runner.temp) || '' }}
+
+    - name: Verify effective Linux Bazel resource policy
+      if: runner.os == 'Linux'
+      shell: bash
+      run: python3 .github/scripts/verify_bazel_resources.py
+
+    - name: Sample Bazel runner resources
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/bazel-execution-logs"
+        pid_file="$RUNNER_TEMP/bazel-resource-sampler.pid"
+        if [[ ! -f "$pid_file" ]] || ! kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+          nohup python3 .github/scripts/bazel_resource_usage.py watch \\
+            > "$RUNNER_TEMP/bazel-execution-logs/resource-sampler.log" 2>&1 < /dev/null &
+          echo "$!" > "$pid_file"
+        fi
+"""
+BAZEL_RESOURCE_REPORT = """      - name: Report Bazel runner resources
+        if: always() && runner.os == 'Linux'
+        run: python3 .github/scripts/bazel_resource_usage.py report
+
+"""
 VOICE_SDK_STEP = """      - name: Prepare pinned GNU voice SDK
         if: runner.os == 'Linux' && endsWith(matrix.target, '-linux-gnu')
         uses: ./.github/actions/codefx-linux-voice-sdk
@@ -132,6 +156,12 @@ def linux_projection(path: str, text: str) -> str:
             'cargo_args=(test -p codex-v8-poc --no-default-features --target "${TARGET}")',
         )
     if name == "bazel.yml":
+        # Full source V8 builds are local when BuildBuddy is unavailable.
+        text = text.replace("timeout-minutes: 180", "timeout-minutes: 360")
+        text = text.replace(
+            "      - name: Upload Bazel execution logs\n",
+            BAZEL_RESOURCE_REPORT + "      - name: Upload Bazel execution logs\n",
+        )
         # This matrix value only named caches; both entries executed native GNU.
         text = text.replace(
             "          - os: ubuntu-24.04\n            target: x86_64-unknown-linux-musl\n",
@@ -265,6 +295,9 @@ def linux_projection(path: str, text: str) -> str:
             '          echo "CARGO_TARGET_DIR=$cargo_target_dir"',
             '          echo "ZIG_LOCAL_CACHE_DIR=$CI_BUILD_ROOT/zig-local"\n          echo "CARGO_TARGET_DIR=$cargo_target_dir"',
         )
+    if path == ".github/actions/prepare-bazel-ci/action.yml":
+        output_base = "        output-base: ${{ steps.setup_ci.outputs.bazel-output-base }}\n"
+        text = text.replace(output_base, output_base + BAZEL_RESOURCE_PREPARATION)
     if path == ".github/actions/setup-rusty-v8/action.yml":
         text += """
     - name: Generate Linux bindings matching the verified native archive

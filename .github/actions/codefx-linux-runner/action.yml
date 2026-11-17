@@ -14,13 +14,15 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        # Home bazelrc is read after the workspace bazelrc. These constraints
-        # affect local actions; authenticated remote execution stays available.
-        cat >> "$HOME/.bazelrc" <<'EOF'
+        # setup-bazel replaces the home bazelrc. Keep the policy in a separate
+        # file, imported both here and by setup-bazel's bazelrc input.
+        # Bazel 9.2 disables the action cache with an empty disk_cache path.
+        cat > "$RUNNER_TEMP/codefx-linux.bazelrc" <<'EOF'
         build --local_resources=cpu=2
         build --local_resources=memory=4096
         common --disk_cache=
         EOF
+        printf '\nimport %s/codefx-linux.bazelrc\n' "$RUNNER_TEMP" >> "$HOME/.bazelrc"
         echo 'CARGO_BUILD_JOBS=2' >> "$GITHUB_ENV"
         echo 'CARGO_INCREMENTAL=0' >> "$GITHUB_ENV"
         echo 'SCCACHE_CACHE_SIZE=2G' >> "$GITHUB_ENV"
