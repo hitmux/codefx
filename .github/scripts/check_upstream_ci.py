@@ -176,7 +176,7 @@ def linux_projection(path: str, text: str) -> str:
         )
         text = text.replace(
             "          ./.github/scripts/run-bazel-ci.sh \\\n",
-            "          if [[ -z \"${BUILDBUDDY_API_KEY:-}\" ]]; then\n"
+            '          if [[ -z "${BUILDBUDDY_API_KEY:-}" ]]; then\n'
             "            # A local_test_jobs cap does not stop native compilation from\n"
             "            # starving tests with short protocol deadlines. Exclusive tests\n"
             "            # run after the build graph, retaining every selected test.\n"
