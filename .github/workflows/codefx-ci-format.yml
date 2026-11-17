@@ -35,6 +35,20 @@ on:
 permissions:
   contents: read
 jobs:
+  bazel-resources:
+    name: Bazel resource and installer regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/prepare-bazel-ci
+        with:
+          target: x86_64-unknown-linux-gnu
+          cache-scope: resource-policy
+      - name: Verify installer retention with the runner's real process tools
+        run: python3 -m unittest discover -s scripts/install -p test_install_sh.py -v
   runtime-regressions:
     if: github.event_name == 'workflow_dispatch' && inputs.runtime_regressions
     runs-on: ubuntu-24.04
@@ -266,6 +280,7 @@ jobs:
             scripts/install/smoke_source_package.py \
             scripts/install/prepare_sdk_package.py \
             scripts/install/test_prepare_sdk_package.py
+          uv run --frozen --project scripts ruff format scripts/install/test_install_sh.py
           pnpm exec prettier --write .github/workflows/*.yml .github/actions/codefx-linux-runner/action.yml .github/actions/prepare-bazel-ci/action.yml .github/actions/codefx-linux-v8-binding/action.yml .github/actions/setup-rusty-v8/action.yml .github/upstream-ci.json .github/CI_POLICY.md .github/workflows/README.md sdk/typescript/src/exec.ts sdk/typescript/tests/exec.test.ts sdk/typescript/tests/run.test.ts sdk/typescript/tests/testCodex.ts
           git diff --binary > "$RUNNER_TEMP/codefx-ci-format.patch"
           git diff --stat

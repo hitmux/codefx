@@ -21,10 +21,10 @@ def verify() -> None:
             'genrule(name = "probe", outs = ["probe.txt"], '
             'cmd = "echo verified > $@")\n'
         )
-        bazel = ["bazel", f"--output_base={root / 'output'}", "--announce_rc"]
+        bazel = ["bazel", f"--output_base={root / 'output'}"]
         try:
             result = subprocess.run(
-                [*bazel, "build", "//:probe"],
+                [*bazel, "build", "--announce_rc", "//:probe"],
                 cwd=root,
                 capture_output=True,
                 text=True,
