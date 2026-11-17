@@ -13,17 +13,15 @@ If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="http
 
 ### Installing Codefx
 
-[Codefx CLI 0.166.0](https://github.com/hitmux/codefx/releases/tag/rust-v0.166.0) is a stable release. Native packages and installer checks cover:
+[Codefx CLI 0.166.0](https://github.com/hitmux/codefx/releases/tag/rust-v0.166.0) is a stable release. Current development, CI and new releases target Linux amd64 only:
 
-| Platform     | Architectures        |
-| ------------ | -------------------- |
-| Linux (musl) | x86_64, ARM64        |
-| macOS        | Intel, Apple Silicon |
-| Windows      | x64, ARM64           |
+| Platform     | Architectures  |
+| ------------ | -------------- |
+| Linux (musl) | amd64 (x86_64) |
 
 Use the reviewed installers below or the [verified installer bundle](https://github.com/hitmux/codefx/releases/download/rust-v0.166.0/codefx-installers-38f48572fe9f.zip). The original `rust-v0.166.0` source archive contains historical wrappers that uninstall existing packages before downloading; the revised installers are maintained independently of that binary build tag.
 
-Linux / macOS -- download the complete bootstrap before executing it:
+Linux amd64 -- download the complete bootstrap before executing it:
 
 ```sh
 (
@@ -34,12 +32,6 @@ Linux / macOS -- download the complete bootstrap before executing it:
     https://raw.githubusercontent.com/hitmux/codefx/main/scripts/install/install-codefx.sh -o "$installer"
   sh "$installer"
 )
-```
-
-Windows -- run in a non-elevated PowerShell:
-
-```powershell
-& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing -TimeoutSec 120 -ErrorAction Stop -Uri 'https://raw.githubusercontent.com/hitmux/codefx/main/scripts/install/install-codefx.ps1').Content))
 ```
 
 Verify the selected command with `codex --version`; the executable remains named `codex` and reports `codefx 0.166.0`.

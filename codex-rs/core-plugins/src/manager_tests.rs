@@ -1664,12 +1664,15 @@ enabled = true
 }
 
 #[tokio::test]
-async fn remote_global_catalog_ignores_local_curated_plugins() {
+async fn remote_catalog_opt_in_preserves_locally_installed_curated_plugins() {
     let codex_home = TempDir::new().unwrap();
     write_file(
         &codex_home.path().join(CONFIG_TOML_FILE),
         r#"[features]
 plugins = true
+remote_plugin = true
+plugin_sharing = true
+apps = true
 
 [plugins."linear@openai-curated"]
 enabled = true
@@ -1701,7 +1704,8 @@ enabled = true
     assert_eq!(
         loaded_plugin_names(&manager, &config).await,
         vec![
-            "linear@openai-curated-remote".to_string(),
+            "calendar@openai-curated".to_string(),
+            "linear@openai-curated".to_string(),
             "remote-only@openai-curated-remote".to_string(),
         ]
     );
@@ -1737,7 +1741,10 @@ enabled = true
     manager.write_remote_installed_plugins_cache(vec![remote_installed_plugin("remote-only")]);
     assert_eq!(
         loaded_plugin_names(&manager, &config).await,
-        vec!["remote-only@openai-curated-remote".to_string()]
+        vec![
+            "linear@openai-curated".to_string(),
+            "remote-only@openai-curated-remote".to_string(),
+        ]
     );
 
     set_test_auth_mode(&auth_manager, /*auth_mode*/ None).await;
@@ -1767,7 +1774,10 @@ enabled = true
     set_test_auth_mode(&auth_manager, Some(AuthMode::Chatgpt)).await;
     assert_eq!(
         loaded_plugin_names(&manager, &config).await,
-        vec!["remote-only@openai-curated-remote".to_string()]
+        vec![
+            "linear@openai-curated".to_string(),
+            "remote-only@openai-curated-remote".to_string(),
+        ]
     );
 }
 
@@ -6117,7 +6127,7 @@ plugins = true
 }
 
 #[tokio::test]
-async fn remote_plugin_caches_refresh_warms_recommended_plugins_cache() {
+async fn explicit_recommendation_fetch_warms_recommended_plugins_cache() {
     let tmp = tempfile::tempdir().unwrap();
     write_file(
         &tmp.path().join(CONFIG_TOML_FILE),
@@ -6144,23 +6154,13 @@ plugins = true
     let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
     let cache_key = recommended_plugins_cache_key(&config);
 
-    manager.maybe_start_remote_plugin_caches_refresh(
-        &config,
-        Some(auth.clone()),
-        /*prefetch_recommendations*/ true,
-        /*on_effective_plugins_changed*/ None,
+    let mode = manager
+        .recommended_plugins_mode_for_config(&config, Some(&auth))
+        .await;
+    assert_eq!(
+        manager.cached_recommended_plugins_mode(&cache_key),
+        Some(mode.clone())
     );
-
-    let mode = tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            if let Some(mode) = manager.cached_recommended_plugins_mode(&cache_key) {
-                break mode;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("recommended plugins cache should be warmed");
     assert_eq!(
         mode,
         RecommendedPluginsMode::Endpoint {
@@ -6797,7 +6797,7 @@ enabled = true
 }
 
 #[tokio::test]
-async fn non_curated_plugin_cache_refresh_preserves_manual_priority() {
+async fn non_curated_background_refresh_never_replaces_manual_request() {
     let codex_home = TempDir::new().unwrap();
     let marketplace_root = codex_home.path().join("marketplace");
     fs::create_dir_all(marketplace_root.join(".git")).unwrap();
@@ -6905,12 +6905,12 @@ enabled = true
         .read()
         .expect("refresh state lock");
     let request = state.requested.as_ref().expect("pending refresh");
-    assert!(matches!(request.git_mode, PluginGitMode::Automatic));
+    assert!(matches!(request.git_mode, PluginGitMode::Manual));
     assert_eq!(
         request.configured_plugin_sources[0]
             .local_version
             .as_deref(),
-        Some("2.0.0")
+        Some("1.0.0")
     );
 }
 
@@ -7510,61 +7510,91 @@ fn remote_installed_plugins_cache_refresh_coalesces_materializations() {
 }
 
 #[tokio::test]
-async fn background_remote_installed_bundle_sync_stays_deduped() {
+async fn account_changes_never_start_plugin_sync_even_with_remote_features_enabled() {
     let codex_home = TempDir::new().unwrap();
-    write_file(
-        &codex_home.path().join(CONFIG_TOML_FILE),
-        r#"[features]
-plugins = true
-remote_plugin = true
-"#,
+    let config_path = codex_home.path().join(CONFIG_TOML_FILE);
+    let original_config = "[features]\nplugins = true\nremote_plugin = true\nplugin_sharing = true\napps = true\n[marketplaces.local]\nsource_type = 'git'\nsource = 'https://example.test/local.git'\n[plugins.\"sample@local\"]\nenabled = true\n";
+    write_file(&config_path, original_config);
+    let skill = codex_home.path().join("skills/local/SKILL.md");
+    write_file(&skill, "local skill must survive account changes");
+    let plugin_root = codex_home.path().join("plugins/cache/local/sample/local");
+    write_plugin(
+        &codex_home.path().join("plugins/cache/local"),
+        "sample/local",
+        "sample",
     );
+    write_file(
+        &plugin_root.join(".mcp.json"),
+        r#"{"mcpServers":{"local-tool":{"command":"echo"}}}"#,
+    );
+    let plugin_skill = plugin_root.join("skills/SKILL.md");
+    let original_plugin_skill = fs::read(&plugin_skill).unwrap();
     let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/backend-api/ps/plugins/installed"))
-        .and(query_param("includeDownloadUrls", "true"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_delay(Duration::from_millis(200))
-                .set_body_json(serde_json::json!({
-                    "plugins": [],
-                    "pagination": {"next_page_token": null},
-                })),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-
     let mut config = load_config(codex_home.path(), codex_home.path()).await;
     config.chatgpt_base_url = format!("{}/backend-api", server.uri());
-    let first_manager = std::sync::Arc::new(test_plugins_manager_with_options(
+    let auth_manager = test_auth_manager(/*auth_mode*/ None);
+    let manager = Arc::new(test_plugins_manager_with_auth_manager(
         codex_home.path().to_path_buf(),
         Some(Product::Codex),
-        Some(AuthMode::Chatgpt),
+        Arc::clone(&auth_manager),
     ));
-    let second_manager = std::sync::Arc::new(test_plugins_manager_with_options(
-        codex_home.path().to_path_buf(),
-        Some(Product::Codex),
+    let (warnings, mut received_warnings) = tokio::sync::mpsc::unbounded_channel();
+    for mode in [
+        None,
         Some(AuthMode::Chatgpt),
-    ));
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
-
-    first_manager.maybe_start_remote_installed_plugin_bundle_sync(
-        &config,
-        Some(auth.clone()),
-        /*on_effective_plugins_changed*/ None,
+        Some(AuthMode::ChatgptAuthTokens),
+        None,
+    ] {
+        set_test_auth_mode(&auth_manager, mode).await;
+        let loaded = manager.plugins_for_config(&config).await;
+        assert_eq!(loaded.plugins().len(), 1);
+        assert_eq!(loaded.plugins()[0].config_name, "sample@local");
+        assert_eq!(
+            sorted_effective_mcp_server_names(&loaded),
+            vec!["local-tool".to_string()]
+        );
+        assert_eq!(loaded.effective_plugin_skill_roots().len(), 1);
+        assert_eq!(fs::read(&plugin_skill).unwrap(), original_plugin_skill);
+        let auth = auth_manager.auth_cached();
+        manager.maybe_start_curated_repo_sync_for_config(
+            &config, /*on_effective_plugins_changed*/ None,
+        );
+        manager.maybe_start_remote_plugin_caches_refresh(
+            &config,
+            auth.clone(),
+            /*prefetch_recommendations*/ true,
+            /*on_effective_plugins_changed*/ None,
+        );
+        manager.maybe_start_remote_installed_plugin_bundle_sync(
+            &config, auth, /*on_effective_plugins_changed*/ None,
+        );
+        manager.maybe_start_plugin_startup_tasks_for_config(
+            &config,
+            /*prefetch_discovery*/ true,
+            Arc::new(|| panic!("automatic marketplace upgrade must not reload config")),
+            /*on_effective_plugins_changed*/ None,
+            warnings.clone(),
+        );
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(server.received_requests().await.unwrap().is_empty());
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), original_config);
+    assert_eq!(
+        fs::read_to_string(&skill).unwrap(),
+        "local skill must survive account changes"
     );
-    second_manager.maybe_start_remote_installed_plugin_bundle_sync(
-        &config,
-        Some(auth),
-        /*on_effective_plugins_changed*/ None,
+    assert!(!codex_home.path().join(".tmp/plugins").exists());
+    assert!(
+        !codex_home
+            .path()
+            .join("plugins/cache/openai-curated-remote")
+            .exists()
     );
-
-    let _guard = first_manager
+    assert!(received_warnings.try_recv().is_err());
+    let _guard = manager
         .acquire_remote_installed_plugin_sync_guard()
         .await
-        .expect("background bundle sync should finish");
-    server.verify().await;
+        .unwrap();
 }
 
 #[tokio::test]
@@ -7811,7 +7841,7 @@ remote_plugin = true
 }
 
 #[tokio::test]
-async fn failed_installed_plugin_pagination_preserves_inventory_and_releases_mutation_gate() {
+async fn disabled_background_sync_preserves_inventory_and_releases_mutation_gate() {
     let codex_home = TempDir::new().unwrap();
     write_file(
         &codex_home.path().join(CONFIG_TOML_FILE),
@@ -7823,14 +7853,14 @@ async fn failed_installed_plugin_pagination_preserves_inventory_and_releases_mut
         "retained",
     );
     let server = MockServer::start().await;
-    // Both bundle sync and its metadata fallback must reject the incomplete inventory.
+    // Background triggers must not fetch even an incomplete account inventory.
     Mock::given(method("GET"))
         .and(path("/backend-api/ps/plugins/installed"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "plugins": [],
             "pagination": {"next_page_token": "next"},
         })))
-        .expect(4)
+        .expect(0)
         .mount(&server)
         .await;
     let mut config = load_config(codex_home.path(), codex_home.path()).await;
@@ -7850,7 +7880,7 @@ async fn failed_installed_plugin_pagination_preserves_inventory_and_releases_mut
         Some(auth),
         /*on_effective_plugins_changed*/ None,
     );
-    // Starting the sync acquires the gate synchronously, so this waits for its release.
+    // A disabled background trigger must leave the shared mutation gate available.
     let _guard = tokio::time::timeout(
         Duration::from_secs(5),
         manager.acquire_remote_installed_plugin_sync_guard(),
@@ -7869,7 +7899,7 @@ async fn failed_installed_plugin_pagination_preserves_inventory_and_releases_mut
         }
     })
     .await
-    .expect("fallback metadata refresh should finish");
+    .expect("no background metadata refresh should remain active");
 
     assert_eq!(
         manager

@@ -6,6 +6,29 @@ For advanced configuration instructions, see [this documentation](https://develo
 
 For a full configuration reference, see [this documentation](https://developers.openai.com/codex/config-reference).
 
+## Codefx account integrations
+
+Codefx defaults to `apps = false`, `remote_plugin = false`, and
+`plugin_sharing = false` under `[features]`. Each integration requires an explicit
+setting to enable its interactive operations.
+
+Signing in to an OpenAI account does not synchronize plugins or skills. Startup,
+discovery, plugin listing, and account changes do not install, replace, remove, or
+upgrade local plugin bundles or skills. This applies even when all three features
+are enabled. The `plugin/reconcile` compatibility endpoint returns an empty result
+without fetching account state or changing local files.
+
+Install, remove, and upgrade plugins through explicit plugin commands or actions.
+Configured local plugins and skills remain available without remote account sync.
+
+## OpenAI retry and timeout settings
+
+The built-in OpenAI provider honors explicit `request_max_retries`,
+`stream_max_retries`, `stream_idle_timeout_ms`, and `websocket_connect_timeout_ms`
+under `[model_providers.openai]`, including zero retries. Unspecified values use
+Codefx's defaults. OpenAI routing and authentication use the built-in provider
+settings.
+
 ## Lifecycle hooks
 
 Admins can set top-level `allow_managed_hooks_only = true` in

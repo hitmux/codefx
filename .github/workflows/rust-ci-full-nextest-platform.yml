@@ -52,7 +52,7 @@ jobs:
   archive:
     name: Build nextest archive
     runs-on: ${{ inputs.archive_runner_group != '' && fromJSON(format('{{"group":"{0}","labels":"{1}"}}', inputs.archive_runner_group, inputs.archive_runner_labels)) || inputs.archive_runner != '' && inputs.archive_runner || inputs.runner_group != '' && fromJSON(format('{{"group":"{0}","labels":"{1}"}}', inputs.runner_group, inputs.runner_labels)) || inputs.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: codex-rs
@@ -65,7 +65,9 @@ jobs:
       CODEX_CI_PROFILE: ${{ inputs.profile }}
       CODEX_CI_TARGET: ${{ inputs.target }}
       CARGO_INCREMENTAL: "0"
-      SCCACHE_CACHE_SIZE: 10G
+      SCCACHE_CACHE_SIZE: 2G
+      CARGO_PROFILE_CI_TEST_DEBUG: "0"
+      CARGO_PROFILE_CI_TEST_INCREMENTAL: "false"
       NEXTEST_ARCHIVE_FILE: nextest-${{ inputs.artifact_id }}.tar.zst
       TEST_HELPERS_ARTIFACT: nextest-test-helpers-${{ inputs.artifact_id }}
     steps:
@@ -74,6 +76,9 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-ci
+      - name: Prepare pinned GNU voice SDK
+        if: runner.os == 'Linux' && endsWith(inputs.target, '-linux-gnu')
+        uses: ./.github/actions/codefx-linux-voice-sdk
 
       - name: Install Linux build dependencies
         if: ${{ runner.os == 'Linux' }}
@@ -95,6 +100,12 @@ jobs:
         with:
           target: ${{ inputs.target }}
 
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: ${{ inputs.target }}
+
       - name: Compute lockfile hash
         id: lockhash
         shell: bash
@@ -108,20 +119,18 @@ jobs:
         uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: cargo-home-${{ env.ARCHIVE_CACHE_RUNNER }}-${{ inputs.target }}-${{ inputs.profile }}-${{ steps.lockhash.outputs.hash }}-${{ steps.lockhash.outputs.toolchain_hash }}
+          key: cargo-sources-v2-${{ runner.os }}-${{ steps.lockhash.outputs.hash }}-${{ steps.lockhash.outputs.toolchain_hash }}
           restore-keys: |
-            cargo-home-${{ env.ARCHIVE_CACHE_RUNNER }}-${{ inputs.target }}-${{ inputs.profile }}-
+            cargo-sources-v2-${{ runner.os }}-
 
       - name: Install sccache
         if: ${{ env.USE_SCCACHE == 'true' }}
         uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
         with:
-          tool: sccache
-          version: 0.7.5
+          tool: sccache@0.12.0
 
       - name: Configure sccache backend
         if: ${{ env.USE_SCCACHE == 'true' }}
@@ -162,8 +171,22 @@ jobs:
 
       - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
         with:
-          tool: nextest
-          version: 0.9.103
+          tool: cargo-nextest@0.9.103
+
+      - name: Prepare Linux runtime payload and compatibility inputs
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          releases="$(python3 ../.github/scripts/resolve_exec_server_releases.py)"
+          echo "CODEX_COMPAT_RELEASES=$releases" >> "$GITHUB_ENV"
+          cargo build --locked --target "$CODEX_CI_TARGET" --profile "$CODEX_CI_PROFILE" --bin bwrap
+          runtime="$CARGO_TARGET_DIR/$CODEX_CI_TARGET/$CODEX_CI_PROFILE"
+          digest="$(sha256sum "$runtime/bwrap" | cut -d ' ' -f 1)"
+          echo "CODEX_BWRAP_SHA256=$digest" >> "$GITHUB_ENV"
+          install -Dm755 "$runtime/bwrap" "$runtime/codex-resources/bwrap"
 
       - name: Build nextest archive
         shell: bash
@@ -192,6 +215,8 @@ jobs:
               -p codex-linux-sandbox \
               --bin codex-linux-sandbox
             cp "${CARGO_TARGET_DIR}/${CODEX_CI_TARGET}/${CODEX_CI_PROFILE}/codex-linux-sandbox" "${helper_dir}/"
+            cp "${CARGO_TARGET_DIR}/${CODEX_CI_TARGET}/${CODEX_CI_PROFILE}/bwrap" "${helper_dir}/"
+            printf '%s  bwrap\n' "$CODEX_BWRAP_SHA256" > "${helper_dir}/bwrap.sha256"
           else
             cargo build \
               --target "${CODEX_CI_TARGET}" \
@@ -234,11 +259,10 @@ jobs:
         uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: cargo-home-${{ env.ARCHIVE_CACHE_RUNNER }}-${{ inputs.target }}-${{ inputs.profile }}-${{ steps.lockhash.outputs.hash }}-${{ steps.lockhash.outputs.toolchain_hash }}
+          key: cargo-sources-v2-${{ runner.os }}-${{ steps.lockhash.outputs.hash }}-${{ steps.lockhash.outputs.toolchain_hash }}
 
       - name: Save sccache cache (fallback)
         if: always() && !cancelled() && env.USE_SCCACHE == 'true' && env.SCCACHE_GHA_ENABLED != 'true'
@@ -269,7 +293,7 @@ jobs:
     name: Tests shard ${{ matrix.shard }}/4
     needs: archive
     runs-on: ${{ inputs.runner_group != '' && fromJSON(format('{{"group":"{0}","labels":"{1}"}}', inputs.runner_group, inputs.runner_labels)) || inputs.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: codex-rs
@@ -289,6 +313,9 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-ci
+      - name: Prepare pinned GNU voice SDK
+        if: runner.os == 'Linux' && endsWith(inputs.target, '-linux-gnu')
+        uses: ./.github/actions/codefx-linux-voice-sdk
 
       - name: Install Linux build dependencies
         if: ${{ runner.os == 'Linux' }}
@@ -306,8 +333,7 @@ jobs:
 
       - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
         with:
-          tool: nextest
-          version: 0.9.103
+          tool: cargo-nextest@0.9.103
 
       - name: Set up remote test env (Docker)
         if: ${{ runner.os == 'Linux' && inputs.remote_env }}
@@ -334,6 +360,15 @@ jobs:
           name: ${{ env.TEST_HELPERS_ARTIFACT }}
           path: ${{ runner.temp }}/${{ env.TEST_HELPERS_ARTIFACT }}
 
+      - name: Resolve Linux compatibility test inputs
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          releases="$(python3 ../.github/scripts/resolve_exec_server_releases.py)"
+          echo "CODEX_COMPAT_RELEASES=$releases" >> "$GITHUB_ENV"
+
       - name: tests
         id: test
         shell: bash
@@ -353,6 +388,9 @@ jobs:
             mkdir -p "${helper_target_dir}"
             cp "${helper_dir}/codex-linux-sandbox" "${helper_target_dir}/"
             chmod +x "${helper_target_dir}/codex-linux-sandbox"
+            (cd "$helper_dir" && sha256sum --check bwrap.sha256)
+            install -Dm755 "$helper_dir/bwrap" "$helper_target_dir/bwrap"
+            install -Dm755 "$helper_dir/bwrap" "$helper_target_dir/codex-resources/bwrap"
           elif [[ "${RUNNER_OS}" == "Windows" ]]; then
             helper_dir="${RUNNER_TEMP}/${TEST_HELPERS_ARTIFACT}"
             helper_target_dir="${CARGO_TARGET_DIR}/${CODEX_CI_TARGET}/${CODEX_CI_PROFILE}"
@@ -379,6 +417,7 @@ jobs:
               env
               "CARGO_BIN_EXE_codex-linux-sandbox=${sandbox_helper}"
               "CARGO_BIN_EXE_codex_linux_sandbox=${sandbox_helper}"
+              "CARGO_BIN_EXE_bwrap=${helper_target_dir}/bwrap"
               cargo nextest "${nextest_args[@]}"
             )
           elif [[ "${RUNNER_OS}" == "Windows" ]]; then

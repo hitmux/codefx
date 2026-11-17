@@ -127,7 +127,15 @@ impl RouteAwareRequestError {
             if error.to_string() == "tunnel error: proxy authorization required" {
                 return Some(RouteFailureClass::ProxyAuthenticationRequired);
             }
-            source = error.source();
+            // io::Error::source skips the wrapped error itself. TLS transports
+            // can put their typed certificate error directly in that payload.
+            source = if let Some(error) = error.downcast_ref::<io::Error>() {
+                error
+                    .get_ref()
+                    .map(|error| error as &(dyn std::error::Error + 'static))
+            } else {
+                error.source()
+            };
         }
 
         match self {

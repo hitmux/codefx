@@ -21,7 +21,10 @@ export type TestClient = {
   client: Codex;
 };
 
-export function createMockClient(url: string): TestClient {
+export function createMockClient(
+  url: string,
+  providerOverrides: CodexConfigObject = {},
+): TestClient {
   return createTestClient({
     config: {
       model_provider: "mock",
@@ -31,6 +34,7 @@ export function createMockClient(url: string): TestClient {
           base_url: url,
           wire_api: "responses",
           supports_websockets: false,
+          ...providerOverrides,
         },
       },
     },

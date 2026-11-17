@@ -1,0 +1,73 @@
+name: Codefx Linux V8 binding
+description: Generate Cargo bindings from the native Unix V8 ABI policy.
+inputs:
+  target:
+    description: Linux Rust target paired with the verified sandbox archive.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Restore binding generated from the pinned native headers
+      id: cache
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ${{ runner.temp }}/codefx-v8-binding
+        key: codefx-v8-binding-v1-${{ inputs.target }}-${{ hashFiles('third_party/v8/**', 'patches/**', 'MODULE.bazel', 'MODULE.bazel.lock', 'codex-rs/Cargo.lock', '.github/actions/codefx-linux-v8-binding/action.yml') }}
+    - name: Prepare binding generator
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: ./.github/actions/prepare-bazel-ci
+      with:
+        target: v8-binding-${{ inputs.target }}
+        cache-scope: codefx-v8-binding
+    - name: Generate the matching sandbox release binding
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+      run: |
+        set -euo pipefail
+        case "$TARGET" in
+          x86_64-unknown-linux-gnu) platform=linux_amd64 ;;
+          aarch64-unknown-linux-gnu) platform=linux_arm64 ;;
+          x86_64-unknown-linux-musl) platform=linux_amd64_musl ;;
+          aarch64-unknown-linux-musl) platform=linux_arm64_musl ;;
+          *) echo "Unsupported Linux V8 binding target: $TARGET" >&2; exit 1 ;;
+        esac
+        label="//third_party/v8:rusty_v8_sandbox_binding_${TARGET//-/_}"
+        ./.github/scripts/run-bazel-ci.sh --remote-download-toplevel -- \
+          build "--platforms=@llvm//platforms:$platform" -- "$label"
+        binding="$(./.github/scripts/run-bazel-ci.sh -- \
+          cquery "--platforms=@llvm//platforms:$platform" --output=files -- "$label" | grep -E '\.rs$')"
+        test -f "$binding"
+        mkdir -p "$RUNNER_TEMP/codefx-v8-binding"
+        cp "$binding" "$RUNNER_TEMP/codefx-v8-binding/binding.rs"
+    - name: Verify native threshold and select the generated binding
+      shell: bash
+      run: |
+        set -euo pipefail
+        binding="$RUNNER_TEMP/codefx-v8-binding/binding.rs"
+        # The published Unix archive uses the owned policy's 64-byte threshold.
+        # Its published size-zero binding must not reach get_contents FFI.
+        # Bazel bindgen output can be one line without rustfmt spacing.
+        python3 - "$binding" <<'PY'
+        import pathlib
+        import re
+        import sys
+        binding = pathlib.Path(sys.argv[1]).read_text()
+        values = re.findall(
+            r"\bpub\s+const\s+v8__TYPED_ARRAY_MAX_SIZE_IN_HEAP\s*:\s*[^=;]+?=\s*(\d+)(?:usize|u32|u64)?\s*;",
+            binding,
+        )
+        if values != ["64"]:
+            raise SystemExit(f"Expected exactly one native 64-byte threshold; found {values}")
+        print("Generated Linux V8 binding uses the native 64-byte threshold")
+        PY
+        echo "RUSTY_V8_SRC_BINDING_PATH=$binding" >> "$GITHUB_ENV"
+    - name: Preserve generated binding for CI diagnosis
+      if: always()
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      with:
+        name: codefx-v8-binding-${{ inputs.target }}
+        path: ${{ runner.temp }}/codefx-v8-binding/binding.rs
+        if-no-files-found: ignore
+        retention-days: 3

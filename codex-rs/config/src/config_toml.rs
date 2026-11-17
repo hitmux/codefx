@@ -945,6 +945,10 @@ pub fn validate_reserved_model_provider_ids(
                 return provider
                     != &ModelProviderInfo {
                         model_catalog_url: provider.model_catalog_url.clone(),
+                        request_max_retries: provider.request_max_retries,
+                        stream_max_retries: provider.stream_max_retries,
+                        stream_idle_timeout_ms: provider.stream_idle_timeout_ms,
+                        websocket_connect_timeout_ms: provider.websocket_connect_timeout_ms,
                         ..Default::default()
                     };
             }

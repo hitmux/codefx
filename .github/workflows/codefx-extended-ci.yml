@@ -1,0 +1,28 @@
+name: Codefx extended compatibility
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: codefx-extended::${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_name != 'main' }}
+jobs:
+  bazel:
+    name: Full Bazel graph
+    uses: ./.github/workflows/bazel.yml
+    secrets: inherit
+  results:
+    name: Extended compatibility results
+    if: ${{ always() }}
+    needs: [bazel]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Report extended failures
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/check_ci_results.py

@@ -186,9 +186,12 @@ fn render_lines(lines: &[Line<'static>]) -> Vec<String> {
 }
 
 fn sanitize_directory(lines: Vec<String>) -> Vec<String> {
+    // Use a version-independent fixture across Cargo and Bazel builds.
+    let version = format!("OpenAI Codex (v{})", env!("CARGO_PKG_VERSION"));
     lines
         .into_iter()
         .map(|line| {
+            let line = line.replace(&version, "OpenAI Codex (v0.0.0)");
             if let Some((prefix, value)) = line.split_once("Directory:") {
                 let padding = &value[..value.len() - value.trim_start().len()];
                 format!("{prefix}Directory:{padding}[[workspace]]")

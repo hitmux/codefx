@@ -1134,9 +1134,8 @@ pub async fn mount_response_once_match<M>(
 where
     M: wiremock::Match + Send + Sync + 'static,
 {
-    let (mock, response_mock) = base_mock();
-    mock.and(matcher)
-        .respond_with(response)
+    let (mock, response_mock) = base_mock_matching(matcher);
+    mock.respond_with(response)
         .up_to_n_times(1)
         .mount(server)
         .await;
@@ -1144,9 +1143,19 @@ where
 }
 
 fn base_mock() -> (MockBuilder, ResponseMock) {
+    base_mock_matching(|_: &wiremock::Request| true)
+}
+
+fn base_mock_matching<M>(matcher: M) -> (MockBuilder, ResponseMock)
+where
+    M: wiremock::Match + Send + Sync + 'static,
+{
     let response_mock = ResponseMock::new();
     let mock = Mock::given(method("POST"))
         .and(path_regex(".*/responses$"))
+        // A rejected parent/child route must not capture the other thread's
+        // request or validate it as if this mock had served the response.
+        .and(matcher)
         .and(response_mock.clone());
     (mock, response_mock)
 }
@@ -1163,9 +1172,8 @@ pub async fn mount_sse_once_match<M>(server: &MockServer, matcher: M, body: Stri
 where
     M: wiremock::Match + Send + Sync + 'static,
 {
-    let (mock, response_mock) = base_mock();
-    mock.and(matcher)
-        .respond_with(sse_response(body))
+    let (mock, response_mock) = base_mock_matching(matcher);
+    mock.respond_with(sse_response(body))
         .up_to_n_times(1)
         .mount(server)
         .await;

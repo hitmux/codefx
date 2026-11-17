@@ -444,10 +444,18 @@ async fn repo_ancestry_without_project_marker_does_not_walk_parents() {
     let cwd = outer.join("nested/inner");
     fs::create_dir_all(outer.join(".agents/skills")).expect("create outer skills");
     fs::create_dir_all(cwd.join(".agents/skills")).expect("create cwd skills");
+    let config = ConfigLayerEntry::new(
+        ConfigLayerSource::User {
+            file: outer.join("config.toml"),
+            profile: None,
+        },
+        toml::from_str("project_root_markers = ['.codefx-test-root']")
+            .expect("valid project root marker config"),
+    );
 
     let roots = repo_agents_skill_roots(
         Some(Arc::clone(&LOCAL_FS)),
-        &stack(Vec::new()),
+        &stack(vec![config]),
         &cwd,
         /*empty_remote_roots*/ None,
     )

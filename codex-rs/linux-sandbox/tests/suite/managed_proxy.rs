@@ -795,9 +795,18 @@ async fn managed_proxy_mode_routes_through_bridge_and_blocks_direct_egress() {
         format!("http://127.0.0.1:{proxy_port}"),
     );
 
-    let sandbox_helper_dir = std::path::Path::new(env!("CARGO_BIN_EXE_codex-linux-sandbox"))
+    let sandbox_helper = Path::new(env!("CARGO_BIN_EXE_codex-linux-sandbox"));
+    let sandbox_helper_dir = sandbox_helper
         .parent()
         .expect("sandbox helper should have a parent");
+    // Bazel may symlink the binary itself to another tree; expose both the
+    // logical executable and its real target to nested bubblewrap.
+    let resolved_sandbox_helper = sandbox_helper
+        .canonicalize()
+        .expect("sandbox helper path should resolve");
+    let resolved_sandbox_helper_dir = resolved_sandbox_helper
+        .parent()
+        .expect("resolved sandbox helper should have a parent");
     let file_system_sandbox_policy =
         FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
             path: FileSystemPath::Special {
@@ -810,7 +819,14 @@ async fn managed_proxy_mode_routes_through_bridge_and_blocks_direct_egress() {
             std::env::current_dir()
                 .expect("current directory should exist")
                 .as_path(),
-            &[AbsolutePathBuf::try_from(sandbox_helper_dir).expect("absolute helper dir")],
+            &[
+                AbsolutePathBuf::try_from(sandbox_helper_dir).expect("absolute helper dir"),
+                AbsolutePathBuf::try_from(resolved_sandbox_helper_dir)
+                    .expect("absolute resolved helper dir"),
+                AbsolutePathBuf::try_from(sandbox_helper).expect("absolute helper executable"),
+                AbsolutePathBuf::try_from(resolved_sandbox_helper.as_path())
+                    .expect("absolute resolved helper executable"),
+            ],
         );
     let permission_profile = PermissionProfile::from_runtime_permissions(
         &file_system_sandbox_policy,

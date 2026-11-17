@@ -323,7 +323,22 @@ async fn api_key_cyber_access_program_server_rejection_does_not_fall_back() -> R
     let home = TempDir::new()?;
     let mut app = start_api_key_app(home.path(), &server).await?;
     set_api_key_cyber_access_programs(&mut app, /*enabled*/ true).await?;
-    let thread = app.start_thread(ThreadStartParams::default()).await?.thread;
+    let thread = app
+        .start_thread(ThreadStartParams {
+            config: Some(std::collections::HashMap::from([
+                (
+                    "model_providers.openai.request_max_retries".to_owned(),
+                    json!(0),
+                ),
+                (
+                    "model_providers.openai.stream_max_retries".to_owned(),
+                    json!(0),
+                ),
+            ])),
+            ..Default::default()
+        })
+        .await?
+        .thread;
     let completed = app
         .start_turn_and_wait_for_completion(TurnStartParams {
             thread_id: thread.id,

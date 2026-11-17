@@ -221,6 +221,7 @@ async fn process_sse_emits_failed_event_on_parse_error() {
 
     let TestCodex { codex, .. } = test_codex()
         .with_config(move |config| {
+            config.model_provider.stream_max_retries = Some(0);
             config
                 .features
                 .disable(Feature::GhostCommit)
@@ -262,6 +263,7 @@ async fn process_sse_records_failed_event_when_stream_closes_without_completed()
 
     let TestCodex { codex, .. } = test_codex()
         .with_config(move |config| {
+            config.model_provider.stream_max_retries = Some(0);
             config
                 .features
                 .disable(Feature::GhostCommit)
@@ -428,6 +430,7 @@ async fn process_sse_failed_event_logs_missing_error() {
 
     let TestCodex { codex, .. } = test_codex()
         .with_config(move |config| {
+            config.model_provider.stream_max_retries = Some(0);
             config
                 .features
                 .disable(Feature::GhostCommit)

@@ -1,0 +1,43 @@
+name: Codefx CI storage maintenance
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Preview deletion candidates without removing anything
+        type: boolean
+        required: true
+        default: true
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codefx-ci-maintenance
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.repository == 'hitmux/codefx'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Remove only aged disposable CI caches and diagnostic artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLY: ${{ github.event_name == 'schedule' || inputs.dry_run == false }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$APPLY" == "true" ]]; then
+            python3 .github/scripts/ci_storage_cleanup.py --apply
+          else
+            python3 .github/scripts/ci_storage_cleanup.py
+          fi

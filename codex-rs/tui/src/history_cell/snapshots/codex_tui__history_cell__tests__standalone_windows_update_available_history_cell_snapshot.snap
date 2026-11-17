@@ -4,9 +4,11 @@ expression: rendered
 ---
 ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ✨ Update available! 0.0.0 -> 9.9.9                                                                        │
-│ Run powershell -ExecutionPolicy Bypass -c '$env:CODEX_NON_INTERACTIVE=1; irm                               │
-│ https://raw.githubusercontent.com/caokai674/codefx/main/scripts/install/install-codefx.ps1 | iex' to update.                                                    │
+│ Run powershell -ExecutionPolicy Bypass -c '$env:CODEFX_REPLACE_OFFICIAL='"'1';                             │
+│ "'$env:CODEX_NON_INTERACTIVE='"'1'; irm                                                                    │
+│ https://raw.githubusercontent.com/caokai674/codefx/main/scripts/install/install-codefx.ps1 | iex" to       │
+│ update.                                                                                                    │
 │                                                                                                            │
 │ See full release notes:                                                                                    │
-│ https://github.com/caokai674/codefx/releases/latest                                                            │
+│ https://github.com/caokai674/codefx/releases/latest                                                        │
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

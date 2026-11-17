@@ -36,7 +36,39 @@ type SuccessfulTlsFallbackServer = (
 );
 
 #[tokio::test]
+async fn native_transport_protocol_error_remains_recognizable() {
+    if run_without_ca_overrides() {
+        return;
+    }
+    let (url, attempts, stop_server) =
+        spawn_protocol_version_rejection_server(/*maximum_attempts*/ 1).unwrap();
+    let error = reqwest::Client::builder()
+        .use_native_tls()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .expect_err("protocol rejection");
+    let _ = stop_server.send(());
+    assert_eq!(attempts.recv().unwrap().unwrap(), 1);
+    assert!(
+        should_retry_with_rustls(&error),
+        "raw native TLS error: {error:?}"
+    );
+    assert!(
+        std::env::var_os("CODEX_CA_CERTIFICATE").is_none()
+            && std::env::var_os("SSL_CERT_FILE").is_none(),
+        "native TLS fixture must not inherit custom CA settings"
+    );
+}
+
+#[tokio::test]
 async fn default_pool_does_not_retry_a_native_tls_protocol_failure() {
+    if run_without_ca_overrides() {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");
@@ -67,6 +99,9 @@ async fn default_pool_does_not_retry_a_native_tls_protocol_failure() {
 
 #[tokio::test]
 async fn retries_a_native_tls_protocol_failure_once_with_rustls() {
+    if run_without_ca_overrides() {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");
@@ -108,6 +143,9 @@ async fn retries_a_native_tls_protocol_failure_once_with_rustls() {
 
 #[tokio::test]
 async fn retries_a_native_tls_failure_after_another_request_caches_rustls() {
+    if run_without_ca_overrides() {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");
@@ -167,6 +205,9 @@ async fn retries_a_native_tls_failure_after_another_request_caches_rustls() {
 
 #[tokio::test]
 async fn does_not_retry_a_cached_rustls_tls_protocol_failure() {
+    if run_without_ca_overrides() {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");
@@ -204,6 +245,9 @@ async fn does_not_retry_a_cached_rustls_tls_protocol_failure() {
 
 #[tokio::test]
 async fn successful_rustls_fallback_replays_the_request_and_reuses_the_destination() {
+    if run_without_ca_overrides() {
+        return;
+    }
     let (url, trusted_rustls_client, observed_requests) =
         spawn_successful_tls_fallback_server().expect("TLS fallback server should start");
     let pool = RouteAwareClientPool::new(
@@ -268,6 +312,9 @@ async fn successful_rustls_fallback_replays_the_request_and_reuses_the_destinati
 
 #[tokio::test]
 async fn retries_a_tls_protocol_failure_when_request_url_contains_certificate_markers() {
+    if run_without_ca_overrides() {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");
@@ -299,6 +346,9 @@ async fn retries_a_tls_protocol_failure_when_request_url_contains_certificate_ma
 
 #[tokio::test]
 async fn does_not_retry_a_non_replayable_streaming_request() {
+    if run_without_ca_overrides() {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");
@@ -339,6 +389,38 @@ async fn does_not_retry_a_non_replayable_streaming_request() {
             .expect("TLS server should reject one connection"),
         1
     );
+}
+
+// Custom CA configuration intentionally selects rustls before the first request.
+// These fixtures exercise native-first fallback and must not inherit that setting.
+// Re-exec instead of mutating the environment of parallel Rust tests.
+fn run_without_ca_overrides() -> bool {
+    if ["CODEX_CA_CERTIFICATE", "SSL_CERT_FILE"]
+        .iter()
+        .all(|name| std::env::var_os(name).is_none())
+    {
+        return false;
+    }
+    assert!(
+        std::env::var_os("CODEX_TLS_FALLBACK_ISOLATED").is_none(),
+        "CA overrides must remain absent in the isolated fixture"
+    );
+    let thread = std::thread::current();
+    let test = thread.name().expect("named test thread");
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", test, "--nocapture"])
+        .env_remove("CODEX_CA_CERTIFICATE")
+        .env_remove("SSL_CERT_FILE")
+        .env("CODEX_TLS_FALLBACK_ISOLATED", "1")
+        .output()
+        .expect("isolated native TLS fixture should run");
+    assert!(
+        output.status.success(),
+        "{test} failed without CA overrides\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    true
 }
 
 fn spawn_successful_tls_fallback_server() -> io::Result<SuccessfulTlsFallbackServer> {

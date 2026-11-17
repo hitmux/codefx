@@ -11,10 +11,6 @@ use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
 use chrono::Duration as ChronoDuration;
 use chrono::Utc;
-use codex_app_server_protocol::HookMetadata;
-use codex_app_server_protocol::HookTrustStatus;
-use codex_app_server_protocol::HooksListParams;
-use codex_app_server_protocol::HooksListResponse;
 use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::LoginAccountResponse;
 use codex_app_server_protocol::PluginAuthPolicy;
@@ -84,6 +80,8 @@ fn write_plugins_enabled_config_with_base_url(
 
 [features]
 plugins = true
+remote_plugin = true
+plugin_sharing = true
 "#,
         ),
     )
@@ -298,6 +296,7 @@ async fn plugin_installed_prefers_remote_curated_conflicts_when_remote_plugin_en
 
 [features]
 plugins = true
+remote_plugin = true
 plugin_sharing = false
 
 [plugins."linear@openai-curated"]
@@ -415,6 +414,7 @@ async fn plugin_installed_prefers_api_curated_conflicts_after_switching_to_api_a
 
 [features]
 plugins = true
+remote_plugin = true
 plugin_sharing = false
 
 [plugins."linear@openai-api-curated"]
@@ -1131,13 +1131,13 @@ enum MarketplaceRefreshScenario {
 }
 
 #[test_case(true, true, MarketplaceRefreshScenario::Distinct; "forced")]
-#[test_case(false, true, MarketplaceRefreshScenario::Distinct; "background")]
+#[test_case(false, true, MarketplaceRefreshScenario::Distinct; "cached")]
 #[test_case(true, false, MarketplaceRefreshScenario::Distinct; "forced with project-enabled plugins")]
-#[test_case(false, false, MarketplaceRefreshScenario::Distinct; "background with project-enabled plugins")]
+#[test_case(false, false, MarketplaceRefreshScenario::Distinct; "cached with project-enabled plugins")]
 #[test_case(true, true, MarketplaceRefreshScenario::Duplicate; "forced preserves source precedence")]
-#[test_case(false, true, MarketplaceRefreshScenario::Duplicate; "background preserves source precedence")]
+#[test_case(false, true, MarketplaceRefreshScenario::Duplicate; "cached preserves source precedence")]
 #[test_case(true, true, MarketplaceRefreshScenario::DuplicateConfiguredInLaterCwd; "forced merges later repository configuration")]
-#[test_case(false, true, MarketplaceRefreshScenario::DuplicateConfiguredInLaterCwd; "background merges later repository configuration")]
+#[test_case(false, true, MarketplaceRefreshScenario::DuplicateConfiguredInLaterCwd; "cached merges later repository configuration")]
 #[tokio::test]
 async fn plugin_list_refreshes_plugins_from_each_cwd(
     force_refetch: bool,
@@ -1187,6 +1187,12 @@ async fn plugin_list_refreshes_plugins_from_each_cwd(
         )?;
         set_project_trust_level(codex_home.path(), repo, TrustLevel::Trusted)?;
         write_installed_plugin_with_version(&codex_home, name, "sample", "1.0.0")?;
+        std::fs::write(
+            codex_home.path().join(format!(
+                "plugins/cache/{name}/sample/1.0.0/.codex-plugin/plugin.json"
+            )),
+            serde_json::to_vec(&serde_json::json!({"name": "sample", "version": "1.0.0"}))?,
+        )?;
     }
     let mut server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -1214,15 +1220,17 @@ async fn plugin_list_refreshes_plugins_from_each_cwd(
             1
         })
         .collect::<Vec<_>>();
-    for (name, version) in &expected_sources {
+    for (name, source_version) in &expected_sources {
+        let version = if force_refetch {
+            *source_version
+        } else {
+            "1.0.0"
+        };
         let manifest = codex_home.path().join(format!(
             "plugins/cache/{name}/sample/{version}/.codex-plugin/plugin.json"
         ));
-        if !force_refetch {
-            wait_for_path_exists(&manifest).await?;
-        }
         let value: serde_json::Value = serde_json::from_slice(&std::fs::read(manifest)?)?;
-        assert_eq!(value["version"], *version);
+        assert_eq!(value["version"], version);
     }
     let id = server
         .send_plugin_installed_request(PluginInstalledParams {
@@ -1961,8 +1969,7 @@ enabled = true
 }
 
 #[tokio::test]
-async fn app_server_startup_downloads_installed_plugin_bundles_without_discovery_prefetch()
--> Result<()> {
+async fn app_server_startup_never_downloads_installed_plugin_bundles() -> Result<()> {
     let codex_home = TempDir::new()?;
     let server = MockServer::start().await;
     write_remote_plugin_catalog_config(
@@ -2025,25 +2032,26 @@ async fn app_server_startup_downloads_installed_plugin_bundles_without_discovery
         .build_initialized_with_timeout(DEFAULT_TIMEOUT)
         .await?;
 
-    wait_for_path_exists(&installed_path.join(".codex-plugin/plugin.json")).await?;
-    let installed_plugin_manifest: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(installed_path.join(".codex-plugin/plugin.json"))?,
-    )?;
-    assert_eq!(
-        installed_plugin_manifest["version"],
-        serde_json::json!("1.2.3")
+    sleep(Duration::from_millis(200)).await;
+    assert!(!installed_path.exists());
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("wiremock records requests")
+            .iter()
+            .all(|request| {
+                !request.url.path().contains("/ps/plugins/")
+                    && !request.url.path().starts_with("/bundles/")
+            })
     );
-    let installed_app_manifest: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(installed_path.join(".app.json"))?)?;
-    assert_eq!(installed_app_manifest, remote_app_manifest);
-    assert!(installed_path.join("skills/plan-work/SKILL.md").is_file());
     let config = std::fs::read_to_string(codex_home.path().join("config.toml"))?;
     assert!(!config.contains("linear@openai-curated-remote"));
     Ok(())
 }
 
 #[tokio::test]
-async fn plugin_list_sync_upgrades_and_removes_remote_installed_plugin_bundles() -> Result<()> {
+async fn plugin_list_never_upgrades_or_removes_remote_installed_plugin_bundles() -> Result<()> {
     let codex_home = TempDir::new()?;
     let server = MockServer::start().await;
     write_remote_plugin_catalog_config(
@@ -2126,19 +2134,18 @@ async fn plugin_list_sync_upgrades_and_removes_remote_installed_plugin_bundles()
         vec![("linear@openai-curated-remote".to_string(), true, true)]
     );
 
-    wait_for_path_exists(&new_path.join(".codex-plugin/plugin.json")).await?;
-    let installed_plugin_manifest: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(new_path.join(".codex-plugin/plugin.json"))?,
-    )?;
-    assert_eq!(
-        installed_plugin_manifest["version"],
-        serde_json::json!("1.2.3")
+    sleep(Duration::from_millis(200)).await;
+    assert!(!new_path.exists());
+    assert!(old_path.join(".codex-plugin/plugin.json").is_file());
+    assert!(stale_path.join("1.0.0/.codex-plugin/plugin.json").is_file());
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("wiremock records requests")
+            .iter()
+            .all(|request| { !request.url.path().starts_with("/bundles/") })
     );
-    let installed_app_manifest: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(new_path.join(".app.json"))?)?;
-    assert_eq!(installed_app_manifest, remote_app_manifest);
-    wait_for_path_missing(&old_path).await?;
-    wait_for_path_missing(&stale_path).await?;
     let config = std::fs::read_to_string(codex_home.path().join("config.toml"))?;
     assert!(!config.contains("linear@openai-curated-remote"));
     Ok(())
@@ -2643,7 +2650,17 @@ async fn plugin_list_honors_global_remote_catalog_cache_ttl() -> Result<()> {
         "linear@openai-curated-remote"
     );
 
-    wait_for_remote_plugin_request_count(&server, "/ps/plugins/list", /*expected_count*/ 1).await?;
+    wait_for_remote_plugin_request_count(&server, "/ps/plugins/list", /*expected_count*/ 0).await?;
+    wait_for_cached_remote_catalog_plugin_ids(codex_home.path(), &[cached_remote_plugin_id])
+        .await?;
+    let request_id = mcp
+        .send_plugin_list_request(PluginListParams {
+            cwds: None,
+            marketplace_kinds: None,
+            force_refetch: true,
+        })
+        .await?;
+    let _: PluginListResponse = timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
     wait_for_cached_remote_catalog_plugin_ids(codex_home.path(), &[refreshed_remote_plugin_id])
         .await?;
     sleep(Duration::from_millis(100)).await;
@@ -2653,8 +2670,7 @@ async fn plugin_list_honors_global_remote_catalog_cache_ttl() -> Result<()> {
 }
 
 #[tokio::test]
-async fn app_server_startup_refreshes_cached_remote_catalog_without_blocking_plugin_list()
--> Result<()> {
+async fn app_server_startup_preserves_cached_catalog_until_explicit_refetch() -> Result<()> {
     let codex_home = TempDir::new()?;
     let server = MockServer::start().await;
     write_remote_plugin_catalog_config(
@@ -2737,7 +2753,8 @@ async fn app_server_startup_refreshes_cached_remote_catalog_without_blocking_plu
         .build()
         .await?;
     timeout(DEFAULT_TIMEOUT, app_server.initialize()).await??;
-    wait_for_remote_plugin_request_count(&server, "/ps/plugins/list", /*expected_count*/ 1).await?;
+    sleep(Duration::from_millis(200)).await;
+    wait_for_remote_plugin_request_count(&server, "/ps/plugins/list", /*expected_count*/ 0).await?;
 
     let request_id = app_server
         .send_plugin_list_request(PluginListParams {
@@ -2763,13 +2780,13 @@ async fn app_server_startup_refreshes_cached_remote_catalog_without_blocking_plu
         "linear@openai-curated-remote"
     );
 
-    wait_for_cached_remote_catalog_plugin_ids(codex_home.path(), &[refreshed_remote_plugin_id])
+    wait_for_cached_remote_catalog_plugin_ids(codex_home.path(), &[cached_remote_plugin_id])
         .await?;
     let request_id = app_server
         .send_plugin_list_request(PluginListParams {
             cwds: None,
             marketplace_kinds: None,
-            force_refetch: false,
+            force_refetch: true,
         })
         .await?;
     let response: PluginListResponse = to_response(
@@ -2795,7 +2812,7 @@ async fn app_server_startup_refreshes_cached_remote_catalog_without_blocking_plu
 }
 
 #[tokio::test]
-async fn app_server_startup_skips_disabled_remote_plugin_catalog_scopes() -> Result<()> {
+async fn app_server_startup_never_refreshes_remote_plugin_catalog_scopes() -> Result<()> {
     let codex_home = TempDir::new()?;
     let server = MockServer::start().await;
     let base_url = format!("{}/backend-api/", server.uri());
@@ -2883,12 +2900,7 @@ async fn app_server_startup_skips_disabled_remote_plugin_catalog_scopes() -> Res
         .build()
         .await?;
     timeout(DEFAULT_TIMEOUT, app_server.initialize()).await??;
-    wait_for_remote_plugin_list_scope_request_count(
-        &server,
-        "WORKSPACE",
-        /*expected_count*/ 1,
-    )
-    .await?;
+    sleep(Duration::from_millis(200)).await;
 
     let requested_scopes = server
         .received_requests()
@@ -2906,7 +2918,7 @@ async fn app_server_startup_skips_disabled_remote_plugin_catalog_scopes() -> Res
                 .map(|(_, scope)| scope.into_owned())
         })
         .collect::<Vec<_>>();
-    assert_eq!(requested_scopes, vec!["WORKSPACE".to_string()]);
+    assert!(requested_scopes.is_empty());
 
     Ok(())
 }
@@ -3771,6 +3783,7 @@ async fn plugin_installed_includes_created_by_me_when_remote_plugins_enabled() -
 
 [features]
 plugins = true
+remote_plugin = true
 plugin_sharing = false
 "#,
             server.uri()
@@ -3835,10 +3848,18 @@ plugin_sharing = false
             .collect::<Vec<_>>(),
         vec![("private-linear@created-by-me-remote", true, true)]
     );
-    wait_for_path_exists(
-        &codex_home.path().join(
-            "plugins/cache/created-by-me-remote/private-linear/1.2.3/.codex-plugin/plugin.json",
-        ),
+    assert!(
+        !codex_home
+            .path()
+            .join(
+                "plugins/cache/created-by-me-remote/private-linear/1.2.3/.codex-plugin/plugin.json",
+            )
+            .exists()
+    );
+    wait_for_remote_plugin_request_count(
+        &server,
+        "/bundles/private-linear.tar.gz",
+        /*expected_count*/ 0,
     )
     .await?;
     wait_for_remote_installed_snapshot_request(&server).await?;
@@ -3846,7 +3867,7 @@ plugin_sharing = false
 }
 
 #[tokio::test]
-async fn plugin_installed_trusts_new_workspace_listed_plugin_hooks() -> Result<()> {
+async fn plugin_installed_never_downloads_or_trusts_workspace_hooks() -> Result<()> {
     let codex_home = TempDir::new()?;
     let server = MockServer::start().await;
     let disabled_hook_key = "available-hooks@workspace-directory:hooks/hooks.json:pre_tool_use:0:0";
@@ -3902,72 +3923,38 @@ trusted_hash = "sha256:unrelated"
         .await?;
 
     trigger_plugin_installed_sync(&mut mcp).await?;
-    let plugin_ids = [
-        "available-hooks@workspace-directory",
-        "default-hooks@workspace-directory",
-    ];
-    let hooks = wait_for_plugin_hooks(
-        &mut mcp,
-        codex_home.path(),
-        &plugin_ids,
-        HookTrustStatus::Trusted,
-    )
-    .await?;
-    for plugin_id in plugin_ids {
-        assert!(
-            hooks
-                .iter()
-                .any(|hook| hook.plugin_id.as_deref() == Some(plugin_id))
-        );
-    }
-    wait_for_path_exists(
-        &codex_home
+    sleep(Duration::from_millis(200)).await;
+    assert!(
+        !codex_home
             .path()
-            .join("plugins/cache/workspace-directory/no-hooks/1.2.3/.codex-plugin/plugin.json"),
-    )
-    .await?;
+            .join("plugins/cache/workspace-directory")
+            .exists()
+    );
     let config: toml::Value = toml::from_str(&std::fs::read_to_string(
         codex_home.path().join("config.toml"),
     )?)?;
-    let hook_states = config["hooks"]["state"].as_table().expect("hook states");
-    for hook in &hooks {
-        let (declaration_hash, content_hash) = hook
-            .current_hash
-            .split_once('/')
-            .expect("declaration and content hashes");
-        assert_eq!(
-            (
-                hook_states[hook.key.as_str()]["trusted_hash"].as_str(),
-                hook_states[hook.key.as_str()]["trusted_content_hash"].as_str(),
-            ),
-            (Some(declaration_hash), Some(content_hash))
-        );
-    }
-    assert!(
-        !hooks
-            .iter()
-            .find(|hook| hook.key == disabled_hook_key)
-            .expect("disabled hook")
-            .enabled
-    );
+    let states = config["hooks"]["state"].as_table().expect("hook states");
+    assert_eq!(states.len(), 2);
+    assert_eq!(states[disabled_hook_key]["enabled"].as_bool(), Some(false));
+    assert!(states[disabled_hook_key].get("trusted_hash").is_none());
     assert_eq!(
-        hook_states[disabled_hook_key]["enabled"].as_bool(),
-        Some(false)
-    );
-    assert_eq!(
-        hook_states[unrelated_hook_key]["trusted_hash"].as_str(),
+        states[unrelated_hook_key]["trusted_hash"].as_str(),
         Some("sha256:unrelated")
     );
-    assert_eq!(
-        hook_states[unrelated_hook_key]["enabled"].as_bool(),
-        Some(false)
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("wiremock records requests")
+            .iter()
+            .all(|request| { !request.url.path().starts_with("/bundles/") })
     );
     Ok(())
 }
 
 #[cfg(unix)]
 #[tokio::test]
-async fn plugin_installed_hook_trust_write_failure_stays_untrusted() -> Result<()> {
+async fn plugin_installed_does_not_mutate_read_only_hook_config() -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::fs::symlink;
 
@@ -4009,25 +3996,22 @@ async fn plugin_installed_hook_trust_write_failure_stays_untrusted() -> Result<(
     std::fs::set_permissions(config_target_dir.path(), read_only_permissions)?;
 
     trigger_plugin_installed_sync(&mut mcp).await?;
-    let plugin_ids = ["failed-trust@workspace-directory"];
-    let before = wait_for_plugin_hooks(
-        &mut mcp,
-        codex_home.path(),
-        &plugin_ids,
-        HookTrustStatus::Untrusted,
-    )
-    .await?;
-    sleep(Duration::from_millis(300)).await;
-    let after = wait_for_plugin_hooks(
-        &mut mcp,
-        codex_home.path(),
-        &plugin_ids,
-        HookTrustStatus::Untrusted,
-    )
-    .await?;
-
-    assert_eq!(after[0].current_hash, before[0].current_hash);
+    sleep(Duration::from_millis(200)).await;
+    assert!(
+        !codex_home
+            .path()
+            .join("plugins/cache/workspace-directory")
+            .exists()
+    );
     assert!(!std::fs::read_to_string(config_target)?.contains("trusted_hash"));
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("wiremock records requests")
+            .iter()
+            .all(|request| { !request.url.path().starts_with("/bundles/") })
+    );
     Ok(())
 }
 
@@ -4182,12 +4166,12 @@ async fn plugin_list_fetches_workspace_directory_kind_when_remote_plugin_disable
     wait_for_remote_plugin_list_scope_request_count(
         &server,
         "WORKSPACE",
-        /*expected_count*/ 1,
+        /*expected_count*/ 0,
     )
     .await?;
     wait_for_cached_remote_catalog_plugin_ids(
         codex_home.path(),
-        &["plugins~Plugin_22222222222222222222222222222222"],
+        &["plugins~Plugin_11111111111111111111111111111111"],
     )
     .await?;
 
@@ -4195,7 +4179,7 @@ async fn plugin_list_fetches_workspace_directory_kind_when_remote_plugin_disable
         .send_plugin_list_request(PluginListParams {
             cwds: None,
             marketplace_kinds: Some(vec![PluginListMarketplaceKind::WorkspaceDirectory]),
-            force_refetch: false,
+            force_refetch: true,
         })
         .await?;
     let response: PluginListResponse = to_response(
@@ -4230,6 +4214,7 @@ async fn plugin_list_fetches_user_plugins_in_created_by_me_remote_marketplace() 
 
 [features]
 plugins = true
+remote_plugin = true
 plugin_sharing = false
 "#,
             server.uri()
@@ -4561,7 +4546,16 @@ async fn plugin_list_fetches_shared_with_me_kind() -> Result<()> {
         share_context.discoverability,
         Some(PluginShareDiscoverability::Unlisted)
     );
-    wait_for_remote_installed_snapshot_request(&server).await?;
+    // Shared-with-me listing fetches its requested workspace scope; it must
+    // not launch the former background full-account snapshot refresh.
+    let requests = server
+        .received_requests()
+        .await
+        .expect("wiremock records requests");
+    assert!(requests.iter().all(|request| {
+        !request.url.path().ends_with("/ps/plugins/installed")
+            || request.url.query_pairs().any(|(name, _)| name == "scope")
+    }));
     wait_for_remote_plugin_request_count(&server, "/ps/plugins/list", /*expected_count*/ 0).await?;
     Ok(())
 }
@@ -4577,6 +4571,7 @@ async fn plugin_list_omits_shared_with_me_kind_when_plugin_sharing_disabled() ->
 
 [features]
 plugins = true
+remote_plugin = true
 plugin_sharing = false
 "#,
             server.uri()
@@ -4992,7 +4987,7 @@ async fn plugin_list_omits_featured_plugin_ids_without_chatgpt_auth() -> Result<
 }
 
 #[tokio::test]
-async fn plugin_list_uses_warmed_featured_plugin_ids_cache_on_first_request() -> Result<()> {
+async fn plugin_list_fetches_featured_ids_explicitly_without_startup_prefetch() -> Result<()> {
     let codex_home = TempDir::new()?;
     let server = MockServer::start().await;
     write_plugin_sync_config(codex_home.path(), &format!("{}/backend-api/", server.uri()))?;
@@ -5012,7 +5007,8 @@ async fn plugin_list_uses_warmed_featured_plugin_ids_cache_on_first_request() ->
         .with_plugin_startup_tasks()
         .build_initialized_with_timeout(DEFAULT_TIMEOUT)
         .await?;
-    wait_for_featured_plugin_request_count(&server, /*expected_count*/ 1).await?;
+    sleep(Duration::from_millis(200)).await;
+    wait_for_featured_plugin_request_count(&server, /*expected_count*/ 0).await?;
 
     let request_id = mcp
         .send_plugin_list_request(PluginListParams {
@@ -5192,19 +5188,6 @@ fn rewrite_cached_remote_catalog_fetched_at(
     Ok(())
 }
 
-async fn wait_for_path_exists(path: &std::path::Path) -> Result<()> {
-    timeout(DEFAULT_TIMEOUT, async {
-        loop {
-            if path.exists() {
-                return Ok::<(), anyhow::Error>(());
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await??;
-    Ok(())
-}
-
 async fn trigger_plugin_installed_sync(mcp: &mut TestAppServer) -> Result<()> {
     let request_id = mcp
         .send_plugin_installed_request(PluginInstalledParams {
@@ -5214,56 +5197,6 @@ async fn trigger_plugin_installed_sync(mcp: &mut TestAppServer) -> Result<()> {
         .await?;
     let _: PluginInstalledResponse =
         timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
-    Ok(())
-}
-
-async fn wait_for_plugin_hooks(
-    mcp: &mut TestAppServer,
-    cwd: &std::path::Path,
-    plugin_ids: &[&str],
-    expected_status: HookTrustStatus,
-) -> Result<Vec<HookMetadata>> {
-    timeout(DEFAULT_TIMEOUT, async {
-        loop {
-            let request_id = mcp
-                .send_hooks_list_request(HooksListParams {
-                    cwds: vec![cwd.to_path_buf()],
-                    ..Default::default()
-                })
-                .await?;
-            let HooksListResponse { data } = mcp.read_response(request_id).await?;
-            let hooks = data
-                .into_iter()
-                .flat_map(|entry| entry.hooks)
-                .filter(|hook| {
-                    hook.plugin_id
-                        .as_deref()
-                        .is_some_and(|plugin_id| plugin_ids.contains(&plugin_id))
-                })
-                .collect::<Vec<_>>();
-            if hooks.len() == plugin_ids.len()
-                && hooks
-                    .iter()
-                    .all(|hook| hook.trust_status == expected_status)
-            {
-                return Ok::<_, anyhow::Error>(hooks);
-            }
-            sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await?
-}
-
-async fn wait_for_path_missing(path: &std::path::Path) -> Result<()> {
-    timeout(DEFAULT_TIMEOUT, async {
-        loop {
-            if !path.exists() {
-                return Ok::<(), anyhow::Error>(());
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await??;
     Ok(())
 }
 
@@ -5724,6 +5657,8 @@ chatgpt_base_url = "{base_url}"
 
 [features]
 plugins = true
+remote_plugin = true
+plugin_sharing = true
 "#
         ),
     )
@@ -5741,6 +5676,8 @@ fn write_remote_plugin_hook_config(
 
 [features]
 plugins = true
+remote_plugin = true
+plugin_sharing = true
 hooks = true
 {hook_state}"#,
         ),

@@ -11,6 +11,10 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Adapt Codefx hosted Linux resources
+      if: runner.os == 'Linux'
+      uses: ./.github/actions/codefx-linux-runner
+
     # setup-ci expects either this step or the Unix fallback below to define
     # CI_BUILD_ROOT. Windows uses a Dev Drive because Cargo and Bazel
     # spend significant time reading and writing build/cache trees.
@@ -67,6 +71,7 @@ runs:
           echo "BAZEL_OUTPUT_USER_ROOT=$bazel_output_user_root"
           echo "BAZEL_REPOSITORY_CACHE=$bazel_repository_cache"
           echo "BAZEL_REPO_CONTENTS_CACHE=$bazel_repo_contents_cache"
+          echo "ZIG_LOCAL_CACHE_DIR=$CI_BUILD_ROOT/zig-local"
           echo "CARGO_TARGET_DIR=$cargo_target_dir"
           echo "TEMP=$tmp"
           echo "TMP=$tmp"
@@ -81,7 +86,7 @@ runs:
       run: mkdir -p "$RUNNER_TEMP/dotslash-curl" && echo retry-all-errors > "$RUNNER_TEMP/dotslash-curl/.curlrc"
 
     - name: Install DotSlash
-      uses: meta/install-dotslash@1e4e7b3e07eaca387acb98f1d4720e0bee8dbb6a # v2
+      uses: facebook/install-dotslash@1e4e7b3e07eaca387acb98f1d4720e0bee8dbb6a # v2
       env:
         CURL_HOME: ${{ runner.temp }}/dotslash-curl
 

@@ -1,3 +1,4 @@
+use anyhow::Context;
 use anyhow::Result;
 use codex_core::TurnInputRequest;
 use codex_core::config::RolloutBudgetConfig;
@@ -52,8 +53,26 @@ fn rollout_budget_message(remaining_tokens: i64) -> String {
     )
 }
 
+fn wire_request_body(request: &wiremock::Request) -> Option<serde_json::Value> {
+    let compressed = request
+        .headers
+        .get("content-encoding")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .split(',')
+                .any(|entry| entry.trim().eq_ignore_ascii_case("zstd"))
+        });
+    let bytes = if compressed {
+        zstd::stream::decode_all(std::io::Cursor::new(&request.body)).ok()?
+    } else {
+        request.body.clone()
+    };
+    serde_json::from_slice(&bytes).ok()
+}
+
 fn wire_request_contains(request: &wiremock::Request, text: &str) -> bool {
-    std::str::from_utf8(&request.body).is_ok_and(|body| body.contains(text))
+    wire_request_body(request).is_some_and(|body| body.to_string().contains(text))
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -174,6 +193,7 @@ async fn invalid_provider_rollout_budget_units_fail_without_retry() -> Result<()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tracing_test::traced_test]
 async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -186,8 +206,34 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
     let spawn_args = json!({
         "message": CHILD_PROMPT,
         "task_name": "budget_worker",
+        "fork_turns": "none",
     })
     .to_string();
+    // A worker completion can wake the root after its explicit response or
+    // steer the following user turn. Acknowledge that notice without usage.
+    mount_sse_once_match(
+        &server,
+        |request: &wiremock::Request| {
+            wire_request_body(request).is_some_and(|body| {
+                body["client_metadata"]["x-codex-parent-thread-id"].is_null()
+                    && body["input"].as_array().is_some_and(|items| {
+                        items.iter().any(|item| {
+                            item["type"] == "agent_message"
+                                && item["recipient"] == "/root"
+                                && item["content"].as_array().is_some_and(|parts| {
+                                    parts.iter().any(|part| {
+                                        part["text"].as_str().is_some_and(|text| {
+                                            text.starts_with("Message Type: FINAL_ANSWER")
+                                        })
+                                    })
+                                })
+                        })
+                    })
+            })
+        },
+        sse(vec![ev_completed("worker-notice-acknowledged")]),
+    )
+    .await;
     mount_sse_once_match(
         &server,
         |request: &wiremock::Request| wire_request_contains(request, ROOT_PROMPT),
@@ -205,7 +251,10 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
     .await;
     mount_sse_once_match(
         &server,
-        |request: &wiremock::Request| wire_request_contains(request, "\"type\":\"agent_message\""),
+        |request: &wiremock::Request| {
+            wire_request_body(request)
+                .is_some_and(|body| body["client_metadata"]["x-codex-parent-thread-id"].is_string())
+        },
         sse(vec![
             ev_response_created("child-1"),
             ev_completed_with_tokens("child-1", /*total_tokens*/ 30),
@@ -216,7 +265,9 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
         &server,
         |request: &wiremock::Request| {
             wire_request_contains(request, SPAWN_CALL_ID)
-                && !wire_request_contains(request, "\"type\":\"agent_message\"")
+                && wire_request_body(request).is_some_and(|body| {
+                    body["client_metadata"]["x-codex-parent-thread-id"].is_null()
+                })
         },
         sse(vec![
             ev_response_created("root-2"),
@@ -242,19 +293,29 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
                 .enable(Feature::MultiAgentV2)
                 .expect("test config should allow multi-agent v2");
             config.rollout_budget = Some(rollout_budget());
+            config.model_provider.request_max_retries = Some(0);
+            config.model_provider.stream_max_retries = Some(0);
         })
         .build(&server)
         .await?;
 
     let mut created_threads = test.thread_manager.subscribe_thread_created();
-    test.submit_turn(ROOT_PROMPT).await?;
+    timeout(Duration::from_secs(20), test.submit_turn(ROOT_PROMPT))
+        .await
+        .context("initial root turn did not complete")??;
     let child_thread_id = timeout(Duration::from_secs(10), created_threads.recv()).await??;
     let child_thread = test.thread_manager.get_thread(child_thread_id).await?;
-    wait_for_event(child_thread.as_ref(), |event| {
-        matches!(event, EventMsg::TurnComplete(_))
-    })
-    .await;
-    test.submit_turn(FOLLOW_UP_PROMPT).await?;
+    timeout(
+        Duration::from_secs(20),
+        wait_for_event(child_thread.as_ref(), |event| {
+            matches!(event, EventMsg::TurnComplete(_))
+        }),
+    )
+    .await
+    .context("budget worker did not complete")?;
+    timeout(Duration::from_secs(20), test.submit_turn(FOLLOW_UP_PROMPT))
+        .await
+        .context("budget follow-up did not complete")??;
 
     let requests = follow_up
         .requests()

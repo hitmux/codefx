@@ -75,6 +75,7 @@ impl TestDaemon {
     pub(super) fn command(&self) -> Command {
         let mut command = Command::new(&self.codex);
         command.env("CODEX_HOME", self.home.path());
+        command.env("RUST_LIB_BACKTRACE", "0");
         command
     }
 

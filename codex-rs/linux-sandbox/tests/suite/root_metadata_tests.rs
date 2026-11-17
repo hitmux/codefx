@@ -35,6 +35,14 @@ async fn root_metadata_symlinks_cannot_reopen_approved_denials() {
     fs::write(private.join("sibling"), "sibling").unwrap();
     codex_utils_cargo_bin::copy_executable(&codex_linux_sandbox_exe(), &work.join("sandbox"))
         .unwrap();
+    // The outer namespace maps this user to root. System executable trust checks
+    // can then reject /usr/bin/bwrap, so model the real package's bundled fallback.
+    fs::create_dir(work.join("codex-resources")).unwrap();
+    codex_utils_cargo_bin::copy_executable(
+        &codex_utils_cargo_bin::cargo_bin("bwrap").expect("built bubblewrap fixture"),
+        &work.join("codex-resources/bwrap"),
+    )
+    .unwrap();
 
     let path_entry = |path: &str, access| {
         FileSystemSandboxEntry::new(

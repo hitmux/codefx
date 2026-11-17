@@ -13,12 +13,15 @@
 //!
 //! This allows us to ship a completely separate set of functionality as part
 //! of the `codex-exec` binary.
+use clap::CommandFactory;
 use clap::Parser;
 use codex_arg0::Arg0DispatchPaths;
 use codex_arg0::arg0_dispatch_or_else;
 use codex_exec::Cli;
 use codex_exec::run_main;
 use codex_utils_cli::CliConfigOverrides;
+use codex_utils_cli::collect_config_overrides;
+use std::ffi::OsString;
 
 #[derive(Parser, Debug)]
 struct TopCli {
@@ -31,16 +34,25 @@ struct TopCli {
 
 fn main() -> anyhow::Result<()> {
     arg0_dispatch_or_else(|arg0_paths: Arg0DispatchPaths| async move {
-        let top_cli = TopCli::parse();
-        // Merge root-level overrides into inner CLI struct so downstream logic remains unchanged.
-        let mut inner = top_cli.inner;
-        inner
-            .config_overrides
-            .prepend_root_overrides(top_cli.config_overrides);
-
+        let inner = parse_cli_from(std::env::args_os()).unwrap_or_else(|error| error.exit());
         run_main(inner, arg0_paths).await?;
         Ok(())
     })
+}
+
+fn parse_cli_from(
+    args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
+) -> Result<Cli, clap::Error> {
+    let args: Vec<OsString> = args.into_iter().map(Into::into).collect();
+    let mut top_cli = TopCli::try_parse_from(&args)?;
+    // As in the main CLI, preserve overrides on both sides of a subcommand.
+    // Clap's global append arguments otherwise retain only the deepest scope.
+    top_cli.config_overrides = collect_config_overrides(TopCli::command(), args)?;
+    let mut inner = top_cli.inner;
+    inner
+        .config_overrides
+        .prepend_root_overrides(top_cli.config_overrides);
+    Ok(inner)
 }
 
 #[cfg(test)]

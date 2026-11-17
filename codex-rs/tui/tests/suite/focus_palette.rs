@@ -387,6 +387,8 @@ impl PtyCodex {
             .env_remove("TERM_PROGRAM_VERSION")
             .env("OPENAI_API_KEY", "focus-palette-test")
             .env("CODEX_HOME", codex_home.path())
+            // Keep panic diagnostics while making CLI error snapshots deterministic.
+            .env("RUST_LIB_BACKTRACE", "0")
             .stdin(stdin)
             .stdout(stdout)
             .stderr(slave.try_clone()?)

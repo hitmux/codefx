@@ -14,7 +14,17 @@ impl TestCodexExecBuilder {
             codex_utils_cargo_bin::cargo_bin("codex-exec")
                 .expect("should find binary for codex-exec"),
         );
+        // Report the child's captured stderr before nextest terminates the test.
+        cmd.timeout(std::time::Duration::from_secs(30));
         cmd.current_dir(self.cwd.path())
+            .args([
+                "-c",
+                "features.api_key_model_discovery=false",
+                "-c",
+                "model_providers.openai.request_max_retries=0",
+                "-c",
+                "model_providers.openai.stream_max_retries=0",
+            ])
             .env("CODEX_HOME", self.home.path())
             .env("CODEX_SQLITE_HOME", self.home.path())
             .env(CODEX_API_KEY_ENV_VAR, "dummy");

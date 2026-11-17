@@ -1623,7 +1623,7 @@ pub const FEATURES: &[FeatureSpec] = &[
         id: Feature::Apps,
         key: "apps",
         stage: Stage::Stable,
-        default_enabled: true,
+        default_enabled: false,
     },
     FeatureSpec {
         id: Feature::Psp,
@@ -1839,7 +1839,7 @@ pub const FEATURES: &[FeatureSpec] = &[
         id: Feature::RemotePlugin,
         key: "remote_plugin",
         stage: Stage::Stable,
-        default_enabled: true,
+        default_enabled: false,
     },
     FeatureSpec {
         id: Feature::PluginDiscoveryPrefetch,
@@ -1851,7 +1851,7 @@ pub const FEATURES: &[FeatureSpec] = &[
         id: Feature::PluginSharing,
         key: "plugin_sharing",
         stage: Stage::Stable,
-        default_enabled: true,
+        default_enabled: false,
     },
     FeatureSpec {
         id: Feature::ExternalMigration,

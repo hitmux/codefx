@@ -1,0 +1,30 @@
+name: Codefx Linux runner
+description: Adapt hosted Linux runner resources without changing upstream checks.
+runs:
+  using: composite
+  steps:
+    - name: Reclaim unused hosted runner tools
+      if: runner.environment == 'github-hosted'
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        df -h "$GITHUB_WORKSPACE"
+    - name: Bound local build resources
+      shell: bash
+      run: |
+        set -euo pipefail
+        # setup-bazel replaces the home bazelrc. Keep the policy in a separate
+        # file, imported both here and by setup-bazel's bazelrc input.
+        # Bazel 9.2 disables the action cache with an empty disk_cache path.
+        cat > "$RUNNER_TEMP/codefx-linux.bazelrc" <<'EOF'
+        build --local_resources=cpu=HOST_CPUS
+        build --local_resources=memory=4096
+        common --disk_cache=
+        test --local_test_jobs=1
+        test --test_env=RUST_TEST_THREADS=2
+        EOF
+        printf '\nimport %s/codefx-linux.bazelrc\n' "$RUNNER_TEMP" >> "$HOME/.bazelrc"
+        echo 'CARGO_BUILD_JOBS=2' >> "$GITHUB_ENV"
+        echo 'CARGO_INCREMENTAL=0' >> "$GITHUB_ENV"
+        echo 'SCCACHE_CACHE_SIZE=2G' >> "$GITHUB_ENV"

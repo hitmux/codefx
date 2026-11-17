@@ -13,6 +13,7 @@ pub mod installed_marketplaces;
 mod loaded_cache_metrics;
 pub mod loader;
 mod manager;
+pub use manager::AUTOMATIC_PLUGIN_UPDATES_ENABLED;
 pub mod manifest;
 pub mod marketplace;
 pub mod marketplace_add;

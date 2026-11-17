@@ -105,6 +105,7 @@ async fn api_key_subagent_inherits_prompt_cache_key_policy(policy: PromptCacheKe
     let spawn_args = serde_json::to_string(&json!({
         "message": CHILD_TASK,
         "task_name": "worker",
+        "fork_turns": "none",
     }))?;
     let root_request = mount_sse_once_match(
         &server,
@@ -139,7 +140,10 @@ async fn api_key_subagent_inherits_prompt_cache_key_policy(policy: PromptCacheKe
     .await;
     mount_sse_once_match(
         &server,
-        |request: &wiremock::Request| body_contains(request, SPAWN_CALL_ID),
+        |request: &wiremock::Request| {
+            body_contains(request, SPAWN_CALL_ID)
+                && !request_has_input_type(request, "agent_message")
+        },
         sse(vec![
             ev_response_created("root-response-2"),
             ev_assistant_message("root-message", "worker finished"),
@@ -147,10 +151,20 @@ async fn api_key_subagent_inherits_prompt_cache_key_policy(policy: PromptCacheKe
         ]),
     )
     .await;
+    // Worker completion can arrive while the parent is still sampling. Its
+    // notification is unrelated to the cache policy and needs its own response.
+    mount_sse_once_match(
+        &server,
+        |request: &wiremock::Request| request_has_input_type(request, "agent_message"),
+        sse(vec![ev_completed("worker-notice-acknowledged")]),
+    )
+    .await;
 
     let mut builder = test_codex()
         .with_auth(CodexAuth::from_api_key("dummy"))
         .with_config(|config| {
+            config.model_provider.request_max_retries = Some(0);
+            config.model_provider.stream_max_retries = Some(0);
             config
                 .features
                 .enable(Feature::Collab)
@@ -164,7 +178,9 @@ async fn api_key_subagent_inherits_prompt_cache_key_policy(policy: PromptCacheKe
     start_with_prompt_cache_key(&mut test, policy.clone()).await?;
     let expected_session_id = test.session_configured.session_id.to_string();
     let expected_cache_key = expected_prompt_cache_key(&policy, &expected_session_id);
-    test.submit_turn(ROOT_PROMPT).await?;
+    tokio::time::timeout(Duration::from_secs(20), test.submit_turn(ROOT_PROMPT))
+        .await
+        .map_err(|_| anyhow!("cache policy parent turn did not complete"))??;
 
     let root_request = root_request
         .requests()

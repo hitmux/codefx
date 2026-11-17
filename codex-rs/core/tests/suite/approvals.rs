@@ -3987,6 +3987,15 @@ async fn approving_fallback_rule_for_compound_command_works() -> Result<()> {
     )
     .await;
 
+    mount_sse_once(
+        &server,
+        sse(vec![
+            ev_assistant_message("first-compound-result", "done"),
+            ev_completed("first-compound-complete"),
+        ]),
+    )
+    .await;
+
     submit_turn(
         &test,
         "invalid-prefix-rule",

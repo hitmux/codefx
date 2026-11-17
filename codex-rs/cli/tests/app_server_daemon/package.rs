@@ -193,7 +193,8 @@ fn packaged_daemon_launch(action: &str, initial: InitialDaemon) -> Result<()> {
         assert_eq!(standalone.join("current").canonicalize()?, cli_selection);
     }
     if action == "bootstrap" {
-        assert_eq!(output["autoUpdateEnabled"], false);
+        // The daemon defaults to automatic updates unless overridden in settings.
+        assert_eq!(output["autoUpdateEnabled"], true);
     }
     Ok(())
 }

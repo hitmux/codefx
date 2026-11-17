@@ -153,21 +153,27 @@ mod tests {
             let expression = format!("new Uint8Array({length}).fill(90)");
             let value = evaluate_script(scope, &expression);
             let view = v8::Local::<v8::ArrayBufferView>::try_from(value).unwrap();
-            let on_heap =
-                v8::TYPED_ARRAY_MAX_SIZE_IN_HEAP != 0 && length <= v8::TYPED_ARRAY_MAX_SIZE_IN_HEAP;
+            let on_heap = match v8::TYPED_ARRAY_MAX_SIZE_IN_HEAP {
+                0 => false,
+                max_size => length <= max_size,
+            };
+            let had_buffer = view.has_buffer();
             // Check native placement before asking C++ to copy into storage:
             // stale size-zero bindings must fail here rather than abort in FFI.
-            assert_eq!(view.has_buffer(), !on_heap, "byte length {length}");
+            // Empty arrays may use a native empty representation in either build.
+            if length > 0 {
+                assert_eq!(had_buffer, !on_heap, "byte length {length}");
+            }
 
             let mut storage = vec![0; v8::TYPED_ARRAY_MAX_SIZE_IN_HEAP];
             let storage_ptr = storage.as_ptr();
             let contents = view.get_contents(&mut storage);
             assert_eq!(contents, vec![90; length], "byte length {length}");
-            if on_heap {
+            if on_heap && length > 0 {
                 assert_eq!(contents.as_ptr(), storage_ptr);
             }
             // Reading inline contents copies bytes without promoting the view.
-            assert_eq!(view.has_buffer(), !on_heap, "byte length {length}");
+            assert_eq!(view.has_buffer(), had_buffer, "byte length {length}");
         }
     }
 

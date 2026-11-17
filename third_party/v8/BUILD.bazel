@@ -782,6 +782,25 @@ v8_artifact_files(
     v8_cpu = "x64",
 )
 
+# Cargo can reuse a verified published archive, but its generated binding must
+# use the same Unix inline TypedArray policy as the compiled native library.
+[
+    v8_artifact_files(
+        name = "rusty_v8_sandbox_binding_%s_unknown_linux_%s" % (arch, libc),
+        srcs = [":binding_generated_152_2_0"],
+        profile = "sandbox_release",
+        v8_cpu = cpu,
+    )
+    for arch, cpu in [
+        ("x86_64", "x64"),
+        ("aarch64", "arm64"),
+    ]
+    for libc in [
+        "gnu",
+        "musl",
+    ]
+]
+
 v8_artifact_files(
     name = "rusty_v8_sandbox_release_pair_aarch64_unknown_linux_gnu",
     srcs = [

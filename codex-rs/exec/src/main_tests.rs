@@ -2,6 +2,34 @@ use super::*;
 use pretty_assertions::assert_eq;
 
 #[test]
+fn standalone_exec_preserves_config_order_across_resume_boundary() {
+    let cli = parse_cli_from([
+        "codex-exec",
+        "-c",
+        "model_providers.openai.stream_max_retries=0",
+        "-c",
+        "model_reasoning_effort=low",
+        "resume",
+        "--last",
+        "--config",
+        "model_reasoning_effort=xhigh",
+        "--config",
+        "openai_base_url=\"http://127.0.0.1:1234/v1\"",
+        "continue",
+    ])
+    .expect("parse standalone exec");
+    assert_eq!(
+        cli.config_overrides.raw_overrides,
+        vec![
+            "model_providers.openai.stream_max_retries=0",
+            "model_reasoning_effort=low",
+            "model_reasoning_effort=xhigh",
+            "openai_base_url=\"http://127.0.0.1:1234/v1\"",
+        ]
+    );
+}
+
+#[test]
 fn top_cli_parses_resume_prompt_after_config_flag() {
     const PROMPT: &str = "echo resume-with-global-flags-after-subcommand";
     let cli = TopCli::parse_from([

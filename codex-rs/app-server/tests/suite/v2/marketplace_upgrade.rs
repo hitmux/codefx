@@ -208,7 +208,7 @@ async fn marketplace_upgrade_all_configured_git_marketplaces() -> Result<()> {
 #[test_case(false; "user config")]
 #[test_case(true; "invalid user config fallback")]
 #[tokio::test]
-async fn automatic_upgrade_isolates_git_while_explicit_install_preserves_configuration(
+async fn startup_skips_git_while_explicit_install_preserves_configuration(
     invalid_user_config: bool,
 ) -> Result<()> {
     let codex_home = TempDir::new()?;
@@ -305,13 +305,12 @@ async fn automatic_upgrade_isolates_git_while_explicit_install_preserves_configu
     let plugin_root = codex_home
         .path()
         .join("plugins/cache/trusted/toolkit/1.0.0/.codex-plugin/plugin.json");
-    timeout(DEFAULT_TIMEOUT, async {
-        while !plugin_root.exists() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await?;
-    assert!(!abandoned.exists());
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(!plugin_root.exists());
+    assert!(
+        abandoned.exists(),
+        "startup must not clean or replace plugin state"
+    );
 
     if invalid_user_config {
         // Subsequent explicit operations must pick up a repaired user config normally.
@@ -319,6 +318,8 @@ async fn automatic_upgrade_isolates_git_while_explicit_install_preserves_configu
     }
     let marketplace_path = marketplace_install_root(codex_home.path())
         .join("trusted/.agents/plugins/marketplace.json");
+    // Stage the local marketplace fixture explicitly; startup performs no Git I/O.
+    std::fs::create_dir_all(marketplace_path.parent().expect("marketplace parent"))?;
     std::fs::write(
         &marketplace_path,
         serde_json::json!({

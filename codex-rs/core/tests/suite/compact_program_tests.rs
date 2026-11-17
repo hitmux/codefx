@@ -80,6 +80,7 @@ async fn submit_pair(
 #[test_case(Compaction::LocalHash, History::ApiKeyCustomProviderResume, Some(CyberAccessProgram::DaybreakBlue); "api key custom provider local resume")]
 #[test_case(Compaction::RemoteHash, History::ApiKeyCustomProviderResume, Some(CyberAccessProgram::DaybreakBlue); "api key custom provider remote resume")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tracing_test::traced_test]
 async fn model_switch_program_pair(
     compaction: Compaction,
     history: History,
@@ -246,6 +247,10 @@ async fn model_switch_program_pair(
                         .enable(Feature::ApiKeyCyberAccessPrograms)
                         .expect("enable API-key Cyber access programs");
                 } else if matches!(history, History::ApiKeyResume) {
+                    config
+                        .features
+                        .disable(Feature::ApiKeyModelDiscovery)
+                        .expect("disable API-key model discovery");
                     config
                         .features
                         .disable(Feature::ApiKeyCyberAccessPrograms)

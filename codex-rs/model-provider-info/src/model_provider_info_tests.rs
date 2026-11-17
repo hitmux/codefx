@@ -1018,6 +1018,35 @@ fn builtin_openai_catalog_override_preserves_inference_and_identity() {
 }
 
 #[test]
+fn builtin_openai_transport_limits_preserve_routing_and_authentication() {
+    let configured = ModelProviderInfo {
+        name: "Ignored name".to_string(),
+        base_url: Some("https://ignored.example/v1".to_string()),
+        requires_openai_auth: false,
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        stream_idle_timeout_ms: Some(1234),
+        websocket_connect_timeout_ms: Some(5678),
+        ..Default::default()
+    };
+    let builtins = built_in_model_providers(Some("https://api.openai.com/v1".to_string()));
+    let mut expected = builtins.clone();
+    let openai = expected.get_mut("openai").unwrap();
+    openai.request_max_retries = Some(0);
+    openai.stream_max_retries = Some(0);
+    openai.stream_idle_timeout_ms = Some(1234);
+    openai.websocket_connect_timeout_ms = Some(5678);
+    assert_eq!(
+        merge_configured_model_providers(
+            builtins,
+            HashMap::from([("openai".to_string(), configured)]),
+        )
+        .unwrap(),
+        expected,
+    );
+}
+
+#[test]
 fn builtin_openai_catalog_rejects_untrusted_destinations() {
     for url in [
         "http://chatgpt.com/backend-api/codex/models",

@@ -227,6 +227,15 @@ async fn direct_and_routed_clients_build_equivalent_requests() {
 
 #[tokio::test]
 async fn request_failures_classify_real_untrusted_certificate_handshakes() {
+    assert_untrusted_certificate_failure(/*rustls*/ false).await;
+}
+
+#[tokio::test]
+async fn request_failures_classify_real_untrusted_rustls_certificate_handshakes() {
+    assert_untrusted_certificate_failure(/*rustls*/ true).await;
+}
+
+async fn assert_untrusted_certificate_failure(rustls: bool) {
     codex_utils_rustls_provider::ensure_rustls_crypto_provider();
     let certificate = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])
         .expect("self-signed certificate should generate");
@@ -252,9 +261,16 @@ async fn request_failures_classify_real_untrusted_certificate_handshakes() {
             .expect("TLS server connection should be created");
         let _ = connection.complete_io(&mut stream);
     });
-    let pool = RouteAwareClientPool::new_without_request_logging(
+    let builder = HttpClientBuilder::new().without_request_logging();
+    let builder = if rustls {
+        builder.with_rustls_tls()
+    } else {
+        builder
+    };
+    let pool = RouteAwareClientPool::with_builder(
         HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
         ClientRouteClass::Api,
+        builder,
     );
 
     let mut request = reqwest::Request::new(
