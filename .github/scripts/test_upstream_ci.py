@@ -263,6 +263,29 @@ class LinuxProjection(unittest.TestCase):
 
 
 class BazelResourcePolicy(unittest.TestCase):
+    def test_postmerge_caller_must_allow_the_v8_child_read_permission(self):
+        path = ".github/workflows/postmerge-ci.yml"
+        source = (
+            "on:\n  push:\n    branches: [main]\n"
+            "jobs:\n  v8-canary:\n    name: v8-canary\n"
+            "    uses: ./.github/workflows/v8-canary.yml\n"
+        )
+        projected = policy.linux_projection(path, source)
+        self.assertIn("workflow_dispatch:", projected)
+        self.assertIn("actions: read", projected)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "root"
+            upstream = Path(temp) / "upstream"
+            for directory, content in ((root, projected), (upstream, source)):
+                file = directory / path
+                file.parent.mkdir(parents=True)
+                file.write_text(content)
+            self.assertEqual(policy.baseline_errors(root, upstream, [path]), [])
+            for original in ("  workflow_dispatch:\n", "      actions: read\n"):
+                with self.subTest(original=original):
+                    (root / path).write_text(projected.replace(original, ""))
+                    self.assertTrue(policy.baseline_errors(root, upstream, [path]))
+
     def test_setup_bazel_must_preserve_and_verify_the_resource_policy(self):
         path = ".github/actions/prepare-bazel-ci/action.yml"
         source = (

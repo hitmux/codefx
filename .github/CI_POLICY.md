@@ -60,6 +60,11 @@ The policy checker permits only these reviewed transformations:
 
 - Remove unsupported Windows, macOS and ARM64 runners and retired upstream publishers.
 - Replace private Linux runners with hosted Ubuntu and allow cold-build budgets.
+- Grant only `contents: read` and `actions: read` to the postmerge V8 workflow
+  call. Its child requires artifact read access; the caller must explicitly
+  allow it on repositories whose default token permissions omit Actions access.
+  A manual postmerge entrypoint validates the complete nested call and aggregate
+  before merging, alongside the existing main push trigger.
 - Replace the SDK's Bazel CLI build with a verified same-run source package,
   preserving SDK commands and running Jest serially on the small runner.
 - Remove the duplicate Bazel test entry labelled musl: its matrix value only

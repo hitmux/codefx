@@ -22,6 +22,8 @@ version, target and digest. It does not rebuild the CLI or reuse a published tag
 
 `codefx-extended-ci.yml` also runs the required Bazel checks independently on main
 or manually. `postmerge-ci.yml` retains full Linux Cargo and V8 validation.
+It also supports manual runs to validate nested workflow permissions and the
+postmerge aggregate on a candidate before merging.
 Full Cargo includes remote-environment tests and also supports manual execution
 and `full-ci` branches.
 

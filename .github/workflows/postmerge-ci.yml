@@ -3,6 +3,7 @@ name: postmerge-ci
 # This is the single entrypoint for main-only CI that is intentionally outside
 # the merge-blocking suite. It keeps the broader postmerge signal in one run.
 on:
+  workflow_dispatch:
   push:
     branches: [main]
 
@@ -16,6 +17,9 @@ jobs:
 
   v8-canary:
     name: v8-canary
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/v8-canary.yml
     secrets: inherit
 

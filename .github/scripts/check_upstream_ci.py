@@ -175,6 +175,15 @@ def linux_projection(path: str, text: str) -> str:
             "name: Bazel test on ${{ matrix.os }} for ${{ matrix.target }}",
             "name: Bazel native GNU tests on ${{ matrix.os }}",
         )
+    if name == "postmerge-ci.yml":
+        # Validate the caller as well as its children before merging. The V8
+        # child requests actions:read, which cannot exceed caller permissions.
+        text = text.replace("on:\n", "on:\n  workflow_dispatch:\n", 1)
+        text = text.replace(
+            "  v8-canary:\n    name: v8-canary\n",
+            "  v8-canary:\n    name: v8-canary\n"
+            "    permissions:\n      contents: read\n      actions: read\n",
+        )
     if name == "rust-ci-full.yml":
         text = text.replace(
             "name: Tests — ubuntu-24.04 - x86_64-unknown-linux-gnu (remote)",
@@ -385,6 +394,13 @@ def coverage_errors(root: Path) -> list[str]:
             "uses: ./.github/workflows/bazel.yml",
             "workflow_dispatch:",
             "branches: [main]",
+        ),
+        ".github/workflows/postmerge-ci.yml": (
+            "workflow_dispatch:",
+            "uses: ./.github/workflows/rust-ci-full.yml",
+            "uses: ./.github/workflows/v8-canary.yml",
+            "actions: read",
+            "run: python3 .github/scripts/check_ci_results.py",
         ),
         ".github/workflows/rust-ci-full.yml": (
             "uses: ./.github/actions/run-argument-comment-lint",
