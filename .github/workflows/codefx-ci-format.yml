@@ -32,9 +32,53 @@ on:
         description: Verify SDK child process lifecycle regressions
         type: boolean
         default: false
+      provider_regressions:
+        description: Stress the complete Bazel model-provider suite with competing CPU work
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
+  provider-regressions:
+    name: Model-provider Bazel concurrency regression
+    if: github.event_name == 'workflow_dispatch' && inputs.provider_regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/prepare-bazel-ci
+        with:
+          target: x86_64-unknown-linux-gnu
+          cache-scope: provider-concurrency
+      - name: Compile the complete provider test binary
+        run: >-
+          ./.github/scripts/run-bazel-ci.sh --print-failed-action-summary --
+          build -- //codex-rs/model-provider:model-provider-unit-tests-bin
+      - name: Repeat every provider test with competing CPU work
+        shell: bash
+        run: |
+          set -euo pipefail
+          load_pids=()
+          trap 'kill "${load_pids[@]}" 2>/dev/null || true' EXIT
+          for worker in 1 2 3; do
+            yes > /dev/null &
+            load_pids+=("$!")
+          done
+          ./.github/scripts/run-bazel-ci.sh --print-failed-test-logs -- \
+            test --notest_keep_going --runs_per_test=10 --nocache_test_results -- \
+            //codex-rs/model-provider:model-provider-unit-tests
+      - name: Report regression resource headroom
+        if: always()
+        run: python3 .github/scripts/bazel_resource_usage.py report
+      - name: Preserve regression diagnostics
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: provider-concurrency-logs
+          path: ${{ runner.temp }}/bazel-execution-logs
+          retention-days: 3
   bazel-resources:
     name: Bazel resource and installer regressions
     strategy:

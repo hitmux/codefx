@@ -21,6 +21,8 @@ runs:
         build --local_resources=cpu=HOST_CPUS
         build --local_resources=memory=4096
         common --disk_cache=
+        test --local_test_jobs=1
+        test --test_env=RUST_TEST_THREADS=2
         EOF
         printf '\nimport %s/codefx-linux.bazelrc\n' "$RUNNER_TEMP" >> "$HOME/.bazelrc"
         echo 'CARGO_BUILD_JOBS=2' >> "$GITHUB_ENV"

@@ -78,6 +78,13 @@ The policy checker permits only these reviewed transformations:
   cache as a positive control. Bazel 9.2 uses `--disk_cache=` to disable this cache.
   Local actions use the runner's available CPUs and a 4096 MiB memory budget;
   Cargo retains its two-job limit. Remote execution concurrency is unchanged.
+- Limit local Bazel test execution to one test binary and two Rust test threads.
+  Libtest otherwise multiplies the build scheduler's concurrency and can exhaust
+  short authentication/catalog deadlines during native compilation. Preserve
+  every test and the product's deadlines; repeat the full provider suite under
+  competing CPU load in the targeted regression workflow. Stop the Bazel run on
+  its first failed test so a test failure is visible before the remaining native
+  build finishes. Passing runs still execute the complete selected test graph.
 - Allow six hours for the complete Bazel graph, including source-built V8 when
   BuildBuddy credentials are unavailable. Keep all test, Clippy and release-only
   commands. Sample free disk throughout the build and report the minimum and

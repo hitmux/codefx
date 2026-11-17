@@ -18,8 +18,18 @@ def verify() -> None:
         (root / "MODULE.bazel").write_text('module(name = "resource_probe")\n')
         (root / ".bazelrc").write_text(f"common --disk_cache={cache}\n")
         (root / "BUILD.bazel").write_text(
+            'load(":probe.bzl", "resource_test")\n'
             'genrule(name = "probe", outs = ["probe.txt"], '
             'cmd = "echo verified > $@")\n'
+            'resource_test(name = "test_budget")\n'
+        )
+        (root / "probe.bzl").write_text(
+            "def _impl(ctx):\n"
+            '    out = ctx.actions.declare_file(ctx.label.name + ".sh")\n'
+            "    ctx.actions.write(out, '#!/bin/sh\\nset -eu\\n"
+            "test $RUST_TEST_THREADS = 2\\n', is_executable = True)\n"
+            "    return [DefaultInfo(executable = out)]\n"
+            "resource_test = rule(implementation = _impl, test = True)\n"
         )
         bazel = ["bazel", f"--output_base={root / 'output'}"]
         try:
@@ -42,6 +52,22 @@ def verify() -> None:
                     raise RuntimeError(f"Effective rc policy missing {option}")
             if cache.exists() and any(cache.iterdir()):
                 raise RuntimeError("setup-bazel re-enabled the disk action cache")
+            result = subprocess.run(
+                [*bazel, "test", "--announce_rc", "--test_output=errors", "//:test_budget"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=True,
+            )
+            for option in (
+                "--local_test_jobs=1",
+                "--test_env=RUST_TEST_THREADS=2",
+            ):
+                if option not in result.stderr:
+                    raise RuntimeError(f"Effective test budget missing {option}")
+            if cache.exists() and any(cache.iterdir()):
+                raise RuntimeError("Test invocation re-enabled the disk action cache")
             # Force another action and explicitly enable caching as a control.
             (root / "BUILD.bazel").write_text(
                 'genrule(name = "probe", outs = ["probe.txt"], '
@@ -64,7 +90,7 @@ def verify() -> None:
             raise
         finally:
             subprocess.run([*bazel, "shutdown"], cwd=root, timeout=30, check=False)
-    print("Verified effective Bazel CPU/memory caps and disabled disk action cache")
+    print("Verified Bazel CPU/memory/test budgets and disabled disk action cache")
 
 
 if __name__ == "__main__":

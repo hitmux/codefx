@@ -157,6 +157,11 @@ def linux_projection(path: str, text: str) -> str:
         )
     if name == "bazel.yml":
         text = text.replace(
+            "            --test_tag_filters=-argument-comment-lint\n",
+            "            --test_tag_filters=-argument-comment-lint\n"
+            "            --notest_keep_going\n",
+        )
+        text = text.replace(
             "runs-on: ${{ matrix.runs_on || matrix.os }}",
             "runs-on: ${{ matrix.os }}",
         )
