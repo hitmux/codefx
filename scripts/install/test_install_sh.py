@@ -614,7 +614,7 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(first.returncode, 0, first.stderr)
             oldest = releases / f"{versions[0]}-{target}"
             helper = oldest / "bin/codex-code-mode-host"
-            shutil.copy("/bin/sleep", helper)
+            shutil.copy("/bin/sh", helper)
             if system.sysname == "Darwin":
                 # A copied macOS system binary cannot run with its platform signature.
                 subprocess.run(
@@ -623,10 +623,12 @@ class InstallShTest(unittest.TestCase):
                     capture_output=True,
                 )
             # A helper can outlive its parent CLI; retain its whole release.
-            # Some runners ship a multicall coreutils binary for /bin/sleep.
-            # Preserve its applet argv[0] while /proc/exe still points into
-            # the old release, which is the property this test exercises.
-            with subprocess.Popen(["sleep", "300"], executable=helper) as running:
+            # Renamed multicall /bin/sleep binaries can reject the helper name.
+            # A shell blocked in its read builtin keeps the old release's real
+            # executable mapped without spawning a child or relying on argv[0].
+            with subprocess.Popen(
+                [str(helper), "-c", "read -r _"], stdin=subprocess.PIPE
+            ) as running:
                 try:
                     second, _ = run_installer_in(
                         root, versions[1], **install_options[versions[1]]
@@ -742,7 +744,7 @@ class InstallShTest(unittest.TestCase):
                         )
                         self.assertEqual(os.read(ready_fd, 128), b"ready\n")
                         with subprocess.Popen(
-                            ["sleep", "300"], executable=helper
+                            [str(helper), "-c", "read -r _"], stdin=subprocess.PIPE
                         ) as late_helper:
                             try:
                                 os.write(resume_fd, b"continue\n")
