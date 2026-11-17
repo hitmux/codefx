@@ -42,6 +42,10 @@ jobs:
           .github/workflows/sdk.yml
           .github/workflows/bazel.yml
           .github/workflows/postmerge-ci.yml
+          .github/workflows/rust-ci.yml
+          .github/workflows/rust-ci-full.yml
+          .github/workflows/v8-canary.yml
+          .github/workflows/codefx-ci-format.yml
       - name: Test CI resource and provenance regressions
         run: |
           python3 -m unittest discover -s .github/scripts -p 'test_codefx_ci.py' -v

@@ -123,7 +123,7 @@ class LinuxProjection(unittest.TestCase):
         )
         projected = policy.linux_projection(".github/workflows/rust-ci.yml", source)
         self.assertIn("name: Linux", projected)
-        self.assertIn("timeout_minutes: 180", projected)
+        self.assertIn("timeout_minutes: 360", projected)
         self.assertNotIn("name: Windows", projected)
         self.assertIn("run: lint", projected)
 

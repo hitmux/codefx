@@ -53,7 +53,13 @@ def verify() -> None:
             if cache.exists() and any(cache.iterdir()):
                 raise RuntimeError("setup-bazel re-enabled the disk action cache")
             result = subprocess.run(
-                [*bazel, "test", "--announce_rc", "--test_output=errors", "//:test_budget"],
+                [
+                    *bazel,
+                    "test",
+                    "--announce_rc",
+                    "--test_output=errors",
+                    "//:test_budget",
+                ],
                 cwd=root,
                 capture_output=True,
                 text=True,

@@ -148,6 +148,19 @@ def linux_projection(path: str, text: str) -> str:
         text = re.sub(r"(?m)^      runner_(?:group|labels):.*\n", "", text)
         text = text.replace("timeout-minutes: 30", "timeout-minutes: 180")
         text = text.replace("timeout_minutes: 30", "timeout_minutes: 180")
+        text = text.replace(
+            "runs-on: ${{ matrix.runs_on || matrix.runner }}",
+            "runs-on: ${{ matrix.runner }}",
+        )
+    if name == "rust-ci.yml":
+        text = text.replace("timeout_minutes: 180", "timeout_minutes: 360")
+    if name == "rust-ci-full.yml":
+        text = re.sub(
+            r"(?ms)(^  argument_comment_lint_prebuilt:\n.*?^    timeout-minutes:) 180",
+            r"\1 360",
+            text,
+            count=1,
+        )
     if name == "v8-canary.yml":
         # Normal builds use the sandbox archive. Canary variants must choose
         # their own feature explicitly so the release variant stays unsandboxed.

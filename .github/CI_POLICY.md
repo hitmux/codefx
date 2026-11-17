@@ -85,8 +85,9 @@ The policy checker permits only these reviewed transformations:
   competing CPU load in the targeted regression workflow. Stop the Bazel run on
   its first failed test so a test failure is visible before the remaining native
   build finishes. Passing runs still execute the complete selected test graph.
-- Allow six hours for the complete Bazel graph, including source-built V8 when
-  BuildBuddy credentials are unavailable. Keep all test, Clippy and release-only
+- Allow six hours for the complete Bazel graph and workspace argument-comment
+  lint, including source-built V8 when BuildBuddy credentials are unavailable.
+  Keep all test, Clippy and release-only
   commands. Sample free disk throughout the build and report the minimum and
   per-directory consumption before artifact/cache uploads, including on failure.
 - Set the CI test profile to no debug information and no incremental state.

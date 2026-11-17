@@ -302,6 +302,17 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/scripts -p test_upstream_ci.py -v
           python3 -m unittest discover -s .github/scripts -p test_codefx_ci.py -v
+      - name: Validate active CI workflow syntax
+        run: >-
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          -shellcheck= -pyflakes=
+          .github/workflows/blocking-ci.yml
+          .github/workflows/bazel.yml
+          .github/workflows/rust-ci.yml
+          .github/workflows/rust-ci-full.yml
+          .github/workflows/v8-canary.yml
+          .github/workflows/postmerge-ci.yml
+          .github/workflows/codefx-ci-format.yml
       - name: Check out the pinned official CI baseline
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
