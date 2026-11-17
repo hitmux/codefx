@@ -316,12 +316,15 @@ class BazelResourcePolicy(unittest.TestCase):
             "jobs:\n  test:\n    timeout-minutes: 30\n"
             "    steps:\n      - run: bazel test //...\n"
             "            --test_tag_filters=-argument-comment-lint\n"
+            "          ./.github/scripts/run-bazel-ci.sh \\\n"
             "      - name: Upload Bazel execution logs\n"
         )
         projected = policy.linux_projection(".github/workflows/bazel.yml", source)
         self.assertIn("timeout-minutes: 360", projected)
         self.assertIn("run: bazel test //...", projected)
         self.assertIn("--notest_keep_going", projected)
+        self.assertIn('if [[ -z "${BUILDBUDDY_API_KEY:-}" ]]', projected)
+        self.assertIn("--test_strategy=exclusive", projected)
         self.assertIn("bazel_resource_usage.py report", projected)
 
 

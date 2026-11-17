@@ -6,7 +6,6 @@ mod fake_bwrap;
 #[path = "capability_discovery/mount_watch.rs"]
 mod mount_watch;
 
-#[cfg(target_os = "linux")]
 use anyhow::Context as _;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
@@ -1116,7 +1115,8 @@ async fn sandboxed_discovery_batches_roots_without_combining_different_permissio
             },
         ],
     )
-    .await?;
+    .await
+    .context("discover roots with shared sandbox permissions")?;
     assert_eq!(
         response
             .roots
@@ -1172,7 +1172,8 @@ async fn sandboxed_discovery_batches_roots_without_combining_different_permissio
                 },
             ],
         )
-        .await?;
+        .await
+        .context("discover roots after forced batch helper failure")?;
         assert_eq!(
             fallback
                 .roots
@@ -1232,7 +1233,8 @@ async fn sandboxed_discovery_batches_roots_without_combining_different_permissio
             },
         ],
     )
-    .await?;
+    .await
+    .context("discover roots with isolated sandbox permissions")?;
     assert_eq!(
         response
             .roots

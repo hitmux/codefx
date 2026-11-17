@@ -101,6 +101,12 @@ jobs:
             --test_verbose_timeout_warnings
             --build_metadata=COMMIT_SHA=${GITHUB_SHA}
           )
+          if [[ -z "${BUILDBUDDY_API_KEY:-}" ]]; then
+            # A local_test_jobs cap does not stop native compilation from
+            # starving tests with short protocol deadlines. Exclusive tests
+            # run after the build graph, retaining every selected test.
+            bazel_test_args+=(--test_strategy=exclusive)
+          fi
           ./.github/scripts/run-bazel-ci.sh \
             "${bazel_wrapper_args[@]}" \
             -- \

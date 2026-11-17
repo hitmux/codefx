@@ -85,6 +85,11 @@ The policy checker permits only these reviewed transformations:
   competing CPU load in the targeted regression workflow. Stop the Bazel run on
   its first failed test so a test failure is visible before the remaining native
   build finishes. Passing runs still execute the complete selected test graph.
+  On runners without BuildBuddy, use exclusive test scheduling so execution
+  starts after the native build graph finishes. A one-binary limit alone still
+  allows compilation to compete with short protocol deadlines. Remote execution
+  keeps its existing scheduling. The targeted regression also repeats the full
+  exec-server capability-discovery suite with competing CPU work.
 - Allow six hours for the complete Bazel graph and workspace argument-comment
   lint, including source-built V8 when BuildBuddy credentials are unavailable.
   Keep all test, Clippy and release-only
