@@ -35,7 +35,7 @@ def verify() -> None:
             # rc. The positive control below proves the cache probe is live.
             for option in (
                 "--disk_cache=",
-                "--local_resources=cpu=2",
+                "--local_resources=cpu=HOST_CPUS",
                 "--local_resources=memory=4096",
             ):
                 if option not in result.stderr:

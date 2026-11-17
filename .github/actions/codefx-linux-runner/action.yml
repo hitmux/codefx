@@ -18,7 +18,7 @@ runs:
         # file, imported both here and by setup-bazel's bazelrc input.
         # Bazel 9.2 disables the action cache with an empty disk_cache path.
         cat > "$RUNNER_TEMP/codefx-linux.bazelrc" <<'EOF'
-        build --local_resources=cpu=2
+        build --local_resources=cpu=HOST_CPUS
         build --local_resources=memory=4096
         common --disk_cache=
         EOF

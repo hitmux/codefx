@@ -71,6 +71,8 @@ The policy checker permits only these reviewed transformations:
   the separate runner policy. A real Bazel probe checks the effective CPU/memory
   caps and absence of action-cache writes after setup, with an explicitly enabled
   cache as a positive control. Bazel 9.2 uses `--disk_cache=` to disable this cache.
+  Local actions use the runner's available CPUs and a 4096 MiB memory budget;
+  Cargo retains its two-job limit. Remote execution concurrency is unchanged.
 - Allow six hours for the complete Bazel graph, including source-built V8 when
   BuildBuddy credentials are unavailable. Keep all test, Clippy and release-only
   commands. Sample free disk throughout the build and report the minimum and
