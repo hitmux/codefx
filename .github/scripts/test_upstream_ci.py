@@ -265,7 +265,9 @@ class LinuxProjection(unittest.TestCase):
 class BazelResourcePolicy(unittest.TestCase):
     def test_setup_bazel_must_preserve_and_verify_the_resource_policy(self):
         path = ".github/actions/prepare-bazel-ci/action.yml"
-        source = "        output-base: ${{ steps.setup_ci.outputs.bazel-output-base }}\n"
+        source = (
+            "        output-base: ${{ steps.setup_ci.outputs.bazel-output-base }}\n"
+        )
         projected = policy.linux_projection(path, source)
         self.assertIn("bazelrc:", projected)
         self.assertIn("verify_bazel_resources.py", projected)

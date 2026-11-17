@@ -11,6 +11,10 @@ def verify() -> None:
     with tempfile.TemporaryDirectory(prefix="codefx-bazel-policy-") as temp:
         root = Path(temp)
         cache = root / "action-cache"
+        # Bazelisk must exercise this checkout's pinned Bazel, not latest.
+        (root / ".bazelversion").write_text(
+            (Path(__file__).resolve().parents[2] / ".bazelversion").read_text()
+        )
         (root / "MODULE.bazel").write_text('module(name = "resource_probe")\n')
         (root / ".bazelrc").write_text(f"common --disk_cache={cache}\n")
         (root / "BUILD.bazel").write_text(
@@ -59,9 +63,7 @@ def verify() -> None:
             print(error.stderr)
             raise
         finally:
-            subprocess.run(
-                [*bazel, "shutdown"], cwd=root, timeout=30, check=False
-            )
+            subprocess.run([*bazel, "shutdown"], cwd=root, timeout=30, check=False)
     print("Verified effective Bazel CPU/memory caps and disabled disk action cache")
 
 

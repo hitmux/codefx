@@ -29,7 +29,9 @@ def report(path: Path) -> None:
                 # A cancelled writer can leave an incomplete final sample.
                 continue
     minimum = min(item["disk_free"] for item in samples) / 1024**3
-    message = f"Bazel runner minimum free disk: {minimum:.2f} GiB ({len(samples)} samples)"
+    message = (
+        f"Bazel runner minimum free disk: {minimum:.2f} GiB ({len(samples)} samples)"
+    )
     print(message)
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
         stream.write(f"\n{message}\n")

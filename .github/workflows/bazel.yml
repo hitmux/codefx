@@ -146,7 +146,7 @@ jobs:
           # that the Bazel test job uses.
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-    runs-on: ${{ matrix.runs_on || matrix.os }}
+    runs-on: ${{ matrix.os }}
     name: Bazel clippy on ${{ matrix.os }} for ${{ matrix.target }}
     environment:
       name: bazel
@@ -250,7 +250,7 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-    runs-on: ${{ matrix.runs_on || matrix.os }}
+    runs-on: ${{ matrix.os }}
     name: Verify release build on ${{ matrix.os }} for ${{ matrix.target }}
     environment:
       name: bazel

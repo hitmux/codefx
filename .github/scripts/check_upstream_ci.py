@@ -156,6 +156,10 @@ def linux_projection(path: str, text: str) -> str:
             'cargo_args=(test -p codex-v8-poc --no-default-features --target "${TARGET}")',
         )
     if name == "bazel.yml":
+        text = text.replace(
+            "runs-on: ${{ matrix.runs_on || matrix.os }}",
+            "runs-on: ${{ matrix.os }}",
+        )
         # Full source V8 builds are local when BuildBuddy is unavailable.
         text = text.replace("timeout-minutes: 180", "timeout-minutes: 360")
         text = text.replace(
@@ -296,7 +300,9 @@ def linux_projection(path: str, text: str) -> str:
             '          echo "ZIG_LOCAL_CACHE_DIR=$CI_BUILD_ROOT/zig-local"\n          echo "CARGO_TARGET_DIR=$cargo_target_dir"',
         )
     if path == ".github/actions/prepare-bazel-ci/action.yml":
-        output_base = "        output-base: ${{ steps.setup_ci.outputs.bazel-output-base }}\n"
+        output_base = (
+            "        output-base: ${{ steps.setup_ci.outputs.bazel-output-base }}\n"
+        )
         text = text.replace(output_base, output_base + BAZEL_RESOURCE_PREPARATION)
     if path == ".github/actions/setup-rusty-v8/action.yml":
         text += """
